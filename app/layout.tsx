@@ -6,9 +6,8 @@ import "./globals.css";
 // off. System stacks look right for an operations tool anyway.
 
 export const metadata: Metadata = {
-  title: "SmokeFix — wildfire smoke-call triangulation",
-  description:
-    "Turns several vague verbal smoke reports into one triangulated coordinate with a confidence score.",
+  title: "EmberAlert — Wildfire Incident Monitoring",
+  description: "Real-time tracking of wildfire incident locations and severity status.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
