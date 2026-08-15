@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
@@ -28,6 +28,18 @@ export type MapCaller = {
   state: "idle" | "playing" | "consistent" | "inconsistent" | "unusable";
 };
 
+export type MapLandmark = {
+  id: string;
+  label: string;
+  lat: number;
+  lng: number;
+  /** True when a caller actually named this place — highlighted so the operator can
+   *  see at a glance which landmark produced a bearing. */
+  referenced: boolean;
+  /** Orientation-only anchors (towns, the lake) stay visible when zoomed out. */
+  major: boolean;
+};
+
 export type MapWedge = {
   callId: string;
   polygon: Feature<Polygon | MultiPolygon>;
@@ -38,6 +50,7 @@ type Props = {
   center: { lat: number; lng: number };
   zoom: number;
   callers: MapCaller[];
+  landmarks: MapLandmark[];
   wedges: MapWedge[];
   fix: Feature<Polygon | MultiPolygon> | null;
   fixCentroid: { lat: number; lng: number } | null;
@@ -80,6 +93,7 @@ export default function MapView({
   center,
   zoom,
   callers,
+  landmarks,
   wedges,
   fix,
   fixCentroid,
@@ -91,6 +105,8 @@ export default function MapView({
   const wedgeLayerRef = useRef<L.LayerGroup | null>(null);
   const fixLayerRef = useRef<L.LayerGroup | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const landmarkLayerRef = useRef<L.LayerGroup | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(zoom);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -126,12 +142,16 @@ export default function MapView({
 
     L.control.zoom({ position: "topright" }).addTo(map);
 
+    landmarkLayerRef.current = L.layerGroup().addTo(map);
     wedgeLayerRef.current = L.layerGroup().addTo(map);
     fixLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
 
     // Leaflet measures its container on creation; inside a flex layout that can
     // happen before the layout settles.
+    // Landmark density is decluttered by zoom, so the layer redraws when it changes.
+    map.on("zoomend", () => setZoomLevel(map.getZoom()));
+
     const observer = new ResizeObserver(() => map.invalidateSize());
     observer.observe(containerRef.current);
 
@@ -140,6 +160,7 @@ export default function MapView({
       map.remove();
       mapRef.current = null;
       wedgeLayerRef.current = null;
+      landmarkLayerRef.current = null;
       fixLayerRef.current = null;
       markerLayerRef.current = null;
     };
@@ -147,6 +168,27 @@ export default function MapView({
     // the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Landmarks. Minor ones drop out when zoomed out so the map stays readable.
+  useEffect(() => {
+    const layer = landmarkLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    for (const lm of landmarks) {
+      // A referenced landmark is the one that produced a bearing, so it must never
+      // be decluttered away — that is the label the operator most needs to see.
+      if (!lm.major && !lm.referenced && zoomLevel < 10) continue;
+      const state = lm.referenced ? "referenced" : lm.major ? "major" : "minor";
+      const icon = L.divIcon({
+        className: "sf-icon",
+        html: `<div class="sf-landmark" data-state="${state}"><span class="sf-lm-dot"></span><span class="sf-lm-label">${lm.label}</span></div>`,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+      L.marker([lm.lat, lm.lng], { icon, interactive: false, zIndexOffset: -1000 }).addTo(layer);
+    }
+  }, [landmarks, zoomLevel]);
 
   // Wedges.
   useEffect(() => {

@@ -13,7 +13,8 @@ import { buildWedge, fuseWedges, type Wedge } from "../lib/geometry";
 import type { Extraction } from "../lib/schema";
 
 const root = process.cwd();
-const data = JSON.parse(readFileSync(join(root, "data/calls.json"), "utf8"));
+const manifestPath = process.argv[2] ?? "data/calls.json";
+const data = JSON.parse(readFileSync(join(root, manifestPath), "utf8"));
 const truth = data.scenario.groundTruth as { lat: number; lng: number };
 
 const wedges: Wedge[] = [];
@@ -29,7 +30,7 @@ for (const call of data.calls) {
   const ex: Extraction = JSON.parse(
     readFileSync(join(root, `fixtures/extractions/${call.id}.json`), "utf8"),
   );
-  const w = buildWedge(call.id, call.caller, ex);
+  const w = buildWedge(call.id, call.caller, ex, data.scenario.regionKey);
   if (w) wedges.push(w);
 
   const fix = fuseWedges(wedges, [], truth);

@@ -99,6 +99,61 @@ body {
 .sf-fix-label { color: #67e8f9; }
 .sf-truth-label { color: #e2e8f0; }
 
+/* ---- Landmark labels ---------------------------------------------------- */
+/* Deliberately quieter than caller markers: they orient the viewer without
+   competing with the callers and the fix, which are what the demo is about. */
+
+.sf-landmark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transform: translate(-3px, -6px);
+}
+
+.sf-lm-dot {
+  width: 4px;
+  height: 4px;
+  flex: none;
+  transform: rotate(45deg);
+  background: #64748b;
+  box-shadow: 0 0 0 1.5px rgb(2 6 23 / 0.8);
+}
+
+.sf-lm-label {
+  font: 500 9px/1.1 var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: #94a3b8;
+  text-shadow:
+    0 0 3px rgb(2 6 23 / 0.95),
+    0 1px 2px rgb(2 6 23 / 0.9);
+}
+
+/* Towns and the lake: orientation anchors, slightly stronger, always visible. */
+.sf-landmark[data-state="major"] .sf-lm-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #cbd5e1;
+  letter-spacing: 0.06em;
+}
+.sf-landmark[data-state="major"] .sf-lm-dot { background: #94a3b8; }
+
+/* A landmark a caller actually named — this is the one that produced a bearing. */
+.sf-landmark[data-state="referenced"] .sf-lm-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgb(2 6 23 / 0.72);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.sf-landmark[data-state="referenced"] .sf-lm-dot {
+  width: 6px;
+  height: 6px;
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgb(2 6 23 / 0.85);
+}
+
 /* ---- Leaflet chrome ----------------------------------------------------- */
 
 /* Leaflet paints its container light grey by default, which flashes white before

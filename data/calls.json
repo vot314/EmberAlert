@@ -2,9 +2,11 @@
   "scenario": {
     "name": "Okanagan Valley — smoke reported west of the lake",
     "region": "West Kelowna / Peachland, British Columbia",
+    "regionKey": "okanagan",
     "groundTruth": { "lat": 49.902, "lng": -119.635 },
     "groundTruthNote": "Ignition point used to author this scenario. Known only to the demo, never to the pipeline — it exists so the UI can report how far off the computed fix landed.",
-    "initialView": { "lat": 49.868, "lng": -119.575, "zoom": 10.4 }
+    "initialView": { "lat": 49.868, "lng": -119.575, "zoom": 10.4 },
+    "expect": { "confidence": "HIGH", "maxErrorMeters": 1500 }
   },
   "calls": [
     {

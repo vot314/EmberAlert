@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { buildWedge, fuseWedges, type Wedge } from "@/lib/geometry";
 import type { Extraction } from "@/lib/schema";
 import type { ExtractionSource } from "@/lib/cache";
+import { landmarksIn, resolveLandmark, type Region } from "@/lib/landmarks";
 import CallTimeline, { type CallRow, type CallState } from "@/components/CallTimeline";
 import scenarioData from "@/data/calls.json";
 
@@ -28,6 +29,7 @@ type Call = {
 const SCENARIO = scenarioData.scenario;
 const CALLS = scenarioData.calls as Call[];
 const GROUND_TRUTH = SCENARIO.groundTruth;
+const REGION = SCENARIO.regionKey as Region;
 
 type Resolved = { extraction: Extraction; source: ExtractionSource; latencyMs: number | null };
 
@@ -48,12 +50,34 @@ export default function Page() {
     for (const call of CALLS) {
       const r = resolved[call.id];
       if (!r) continue;
-      const w = buildWedge(call.id, call.caller, r.extraction);
+      const w = buildWedge(call.id, call.caller, r.extraction, REGION);
       if (w) ws.push(w);
       else unusable.push(call.id);
     }
     const f = fuseWedges(ws, unusable, GROUND_TRUTH);
     return { wedges: ws, fix: f, wedgeById: new Map(ws.map((w) => [w.callId, w])) };
+  }, [resolved]);
+
+  // Landmarks a caller actually named are highlighted, so the operator can see which
+  // place produced a bearing rather than having to infer it from the wedge.
+  const mapLandmarks = useMemo(() => {
+    const referenced = new Set<string>();
+    for (const call of CALLS) {
+      const r = resolved[call.id];
+      if (!r) continue;
+      for (const l of r.extraction.landmarks) {
+        const lm = resolveLandmark(l.name, REGION);
+        if (lm) referenced.add(lm.id);
+      }
+    }
+    return landmarksIn(REGION).map((l) => ({
+      id: l.id,
+      label: l.label,
+      lat: l.lat,
+      lng: l.lng,
+      referenced: referenced.has(l.id),
+      major: Boolean(l.labelOnly),
+    }));
   }, [resolved]);
 
   const rows: CallRow[] = CALLS.map((call) => {
@@ -237,6 +261,7 @@ export default function Page() {
                     : "idle";
               return { id: c.id, label: c.callerLabel, lat: c.caller.lat, lng: c.caller.lng, state };
             })}
+            landmarks={mapLandmarks}
             wedges={wedges.map((w) => ({
               callId: w.callId,
               polygon: w.polygon,

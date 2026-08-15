@@ -1,6 +1,6 @@
 import * as turf from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
-import { resolveLandmark } from "./landmarks";
+import { resolveLandmark, type Region } from "./landmarks";
 import type { Extraction } from "./schema";
 
 /**
@@ -115,6 +115,7 @@ export function buildWedge(
   callId: string,
   caller: CallerPosition,
   ex: Extraction,
+  region?: Region,
 ): Wedge | null {
   const center = turf.point([caller.lng, caller.lat]);
 
@@ -125,7 +126,7 @@ export function buildWedge(
 
   // 1. A named, resolvable landmark gives the tightest bearing.
   for (const l of ex.landmarks) {
-    const lm = resolveLandmark(l.name);
+    const lm = resolveLandmark(l.name, region);
     if (!lm) continue;
 
     const lmPoint = turf.point([lm.lng, lm.lat]);

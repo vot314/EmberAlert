@@ -12,7 +12,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const manifest = JSON.parse(readFileSync(join(root, "data/calls.json"), "utf8"));
+const manifestPath = process.argv[2] ?? "data/calls.json";
+const manifest = JSON.parse(readFileSync(join(root, manifestPath), "utf8"));
 
 if (process.platform !== "darwin") {
   console.error("`say` is macOS-only. Supply your own WAVs in public/calls/ instead.");

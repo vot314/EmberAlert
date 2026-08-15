@@ -11,16 +11,19 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as turf from "@turf/turf";
 import { buildWedge, fuseWedges, type Wedge } from "../lib/geometry";
+import type { Region } from "../lib/landmarks";
 import type { Extraction } from "../lib/schema";
 
 const root = process.cwd();
-const data = JSON.parse(readFileSync(join(root, "data/calls.json"), "utf8"));
+const manifestPath = process.argv[2] ?? "data/calls.json";
+const data = JSON.parse(readFileSync(join(root, manifestPath), "utf8"));
+const region: Region | undefined = data.scenario.regionKey;
 const truth = data.scenario.groundTruth as { lat: number; lng: number };
 
 const wedges: Wedge[] = [];
 const unusable: string[] = [];
 
-console.log(`\nScenario: ${data.scenario.name}`);
+console.log(`\nScenario: ${data.scenario.name}  [${manifestPath}]`);
 console.log(`Ground truth: ${truth.lat}, ${truth.lng}\n`);
 console.log("per-call geometry");
 console.log("-".repeat(78));
@@ -29,7 +32,7 @@ for (const call of data.calls) {
   const ex: Extraction = JSON.parse(
     readFileSync(join(root, `fixtures/extractions/${call.id}.json`), "utf8"),
   );
-  const wedge = buildWedge(call.id, call.caller, ex);
+  const wedge = buildWedge(call.id, call.caller, ex, region);
 
   if (!wedge) {
     unusable.push(call.id);
@@ -89,9 +92,14 @@ const expectedOutliers: string[] = data.calls
   .map((c: { id: string }) => c.id);
 
 const problems: string[] = [];
-if (fix.confidence !== "HIGH") problems.push(`confidence is ${fix.confidence}, expected HIGH`);
-if (fix.errorMeters === null || fix.errorMeters > 1500)
-  problems.push(`error ${fix.errorMeters?.toFixed(0)} m exceeds the 1500 m budget`);
+// Expectations are declared per scenario. Three reports genuinely constrain less
+// than five, so the GTA scenario legitimately lands at MEDIUM — the harness records
+// that rather than the thresholds being loosened to make every scenario look HIGH.
+const expect = data.scenario.expect ?? { confidence: "HIGH", maxErrorMeters: 1500 };
+if (fix.confidence !== expect.confidence)
+  problems.push(`confidence is ${fix.confidence}, expected ${expect.confidence}`);
+if (fix.errorMeters === null || fix.errorMeters > expect.maxErrorMeters)
+  problems.push(`error ${fix.errorMeters?.toFixed(0)} m exceeds the ${expect.maxErrorMeters} m budget`);
 for (const id of expectedOutliers) {
   if (!fix.inconsistentCallIds.includes(id))
     problems.push(`${id} was authored as an outlier but was not flagged`);
@@ -108,4 +116,4 @@ if (problems.length) {
   for (const p of problems) console.log(`  - ${p}`);
   process.exit(1);
 }
-console.log("PASSED — scenario converges, outlier correctly isolated\n");
+console.log(`PASSED — converges at ${fix.confidence}, ${Math.round(fix.errorMeters ?? 0)} m error\n`);

@@ -23,7 +23,8 @@ if (existsSync(envPath)) {
 }
 
 const root = process.cwd();
-const data = JSON.parse(readFileSync(join(root, "data/calls.json"), "utf8"));
+const manifestPath = process.argv[2] ?? "data/calls.json";
+const data = JSON.parse(readFileSync(join(root, manifestPath), "utf8"));
 const truth = data.scenario.groundTruth as { lat: number; lng: number };
 
 async function main() {
@@ -81,7 +82,7 @@ for (const call of data.calls) {
   if (live.notes) console.log(`     notes: ${live.notes}`);
   console.log("");
 
-  const w = buildWedge(call.id, call.caller, live);
+  const w = buildWedge(call.id, call.caller, live, data.scenario.regionKey);
   if (w) wedges.push(w);
   else unusable.push(call.id);
 }

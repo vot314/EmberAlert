@@ -68,10 +68,15 @@ separate low white plume near the airport that the fusion step isolates.
 | extractions | search area | error vs ignition | confidence |
 |---|---|---|---|
 | authored fixtures | 8.97 km² | 123 m | HIGH |
-| live `gemini-3.5-flash` | 8.31 km² | 979 m | HIGH |
+| live `gemini-3.5-flash` | 13.66 km² | 111 m | MEDIUM |
+
+The live run lands at MEDIUM because a wider search area is the honest read on five
+voice reports where only one gave a distance — and it is nonetheless accurate to 111 m.
 
 `npx tsx scripts/compare-live.ts` re-runs the live model and diffs every field against
 the fixtures. `npx tsx scripts/collapse-curve.ts` prints how the area shrinks per call.
+A second scenario in `data/calls-gta.json` covers Rouge Park in the GTA; pass any
+manifest path to those scripts to run it.
 
 ## A note on what this does not do
 
