@@ -1,0 +1,9 @@
+{
+  "landmarks": [],
+  "direction": { "compass": "WSW", "relative": "bearing west southwest from my position" },
+  "distance_hint": { "value": 7, "unit": "km", "vagueness": "precise" },
+  "smoke": { "color": "grey", "volume": "column", "drift_direction": "east northeast" },
+  "description_specificity": 0.9,
+  "secondhand": false,
+  "notes": "Off-duty responder giving a formal bearing and range; also reports the fire is established in timber."
+}
