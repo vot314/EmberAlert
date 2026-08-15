@@ -6,14 +6,6 @@ import "leaflet/dist/leaflet.css";
 import type { Incident, IncidentSeverity } from "./IncidentList";
 import { type WindData } from "@/lib/wind";
 
-export type MapLandmark = {
-  id: string;
-  label: string;
-  lat: number;
-  lng: number;
-  referenced: boolean;
-};
-
 type Props = {
   center: { lat: number; lng: number };
   zoom: number;
@@ -21,7 +13,6 @@ type Props = {
   selectedId: string | null;
   showWind?: boolean;
   windData?: WindData | null;
-  landmarks?: MapLandmark[];
   onSelectIncident?: (id: string) => void;
 };
 
@@ -45,14 +36,16 @@ export default function MapView({
   selectedId,
   showWind = true,
   windData = null,
-  landmarks = [],
   onSelectIncident,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const onSelectRef = useRef(onSelectIncident);
+  useEffect(() => {
+    onSelectRef.current = onSelectIncident;
+  }, [onSelectIncident]);
   const windLayerRef = useRef<L.LayerGroup | null>(null);
-  const landmarkLayerRef = useRef<L.LayerGroup | null>(null);
   const [zoomLevel, setZoomLevel] = useState(zoom);
 
   useEffect(() => {
@@ -63,59 +56,27 @@ export default function MapView({
       zoom,
       zoomControl: false,
       attributionControl: true,
+      // Leaflet fades each tile in by animating its inline opacity from a
+      // requestAnimationFrame loop. If that loop is throttled — a background tab, a
+      // hidden pane, a slow first paint — tiles can be left stranded part-way and the
+      // basemap renders permanently washed out or near-black. Nothing about this view
+      // needs the fade, so turn it off and have tiles paint at full opacity.
+      fadeAnimation: false,
     });
     mapRef.current = map;
 
-    // Create custom Leaflet pane for dark overlay at zIndex 250 (behind vectors & markers)
-    const darkPane = map.createPane("darkOverlayPane");
-    darkPane.style.zIndex = "250";
-    darkPane.style.pointerEvents = "none";
-
-    const BLANK_TILE =
-      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
-    if (process.env.NEXT_PUBLIC_OFFLINE !== "1") {
-      L.tileLayer(ESRI_IMAGERY, {
-        maxZoom: 18,
-        attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
-      }).addTo(map);
-      L.tileLayer(CARTO_LABELS, {
-        maxZoom: 18,
-        className: "sf-labels",
-        attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
-      }).addTo(map);
-    }
-
-    L.tileLayer("/tiles/{z}/{x}/{y}.jpg", {
-      maxZoom: 13,
-      maxNativeZoom: 13,
-      errorTileUrl: BLANK_TILE,
+    L.tileLayer(ESRI_IMAGERY, {
+      maxZoom: 18,
+      attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
     }).addTo(map);
-
-    L.tileLayer("/tiles-labels/{z}/{x}/{y}.png", {
-      maxZoom: 13,
-      maxNativeZoom: 13,
+    L.tileLayer(CARTO_LABELS, {
+      maxZoom: 18,
       className: "sf-labels",
-      errorTileUrl: BLANK_TILE,
+      attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
     }).addTo(map);
-
-    // Render dark background overlay on darkOverlayPane (zIndex 250)
-    L.rectangle(
-      [
-        [-90, -180],
-        [90, 180],
-      ],
-      {
-        color: "none",
-        fillColor: "#020617",
-        fillOpacity: 0.55,
-        pane: "darkOverlayPane",
-      }
-    ).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
 
-    landmarkLayerRef.current = L.layerGroup().addTo(map);
     windLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
 
@@ -128,31 +89,11 @@ export default function MapView({
       observer.disconnect();
       map.remove();
       mapRef.current = null;
-      landmarkLayerRef.current = null;
       windLayerRef.current = null;
       markerLayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Render landmarks if available
-  useEffect(() => {
-    const layer = landmarkLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-
-    for (const lm of landmarks) {
-      if (!lm.referenced && zoomLevel < 10) continue;
-      const state = lm.referenced ? "referenced" : "minor";
-      const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-landmark" data-state="${state}"><span class="sf-lm-dot"></span><span class="sf-lm-label">${lm.label}</span></div>`,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
-      L.marker([lm.lat, lm.lng], { icon, interactive: false, zIndexOffset: -1000 }).addTo(layer);
-    }
-  }, [landmarks, zoomLevel]);
 
   // Render Continuous Wave Wind Fronts + Dynamically Scaled & Perfectly Aligned Directional Triangles
   useEffect(() => {
@@ -282,12 +223,10 @@ export default function MapView({
             justify-content: center;
             transition: all 0.2s ease;
           ">
-            <div style="
-              width: ${isSelected ? "10px" : "6px"};
-              height: ${isSelected ? "10px" : "6px"};
-              border-radius: 50%;
-              background-color: #ffffff;
-            "></div>
+            <span style="
+              font: 700 ${isSelected ? "13px" : "11px"}/1 ui-sans-serif, system-ui, sans-serif;
+              color: #0f172a;
+            ">${inc.rank}</span>
           </div>
           <div class="ember-label" style="
             position: absolute;
@@ -308,7 +247,7 @@ export default function MapView({
             transition: opacity 0.25s ease-in-out;
             z-index: 10;
           ">
-            ${inc.name} (${inc.severity})
+            #${inc.rank} ${inc.name} · ${inc.score}${inc.callCount > 1 ? ` · ${inc.callCount} calls` : ""}
           </div>
         </div>
       `;
@@ -326,9 +265,7 @@ export default function MapView({
         zIndexOffset: isSelected ? 1000 : 100,
       });
 
-      if (onSelectIncident) {
-        marker.on("click", () => onSelectIncident(inc.id));
-      }
+      marker.on("click", () => onSelectRef.current?.(inc.id));
 
       marker.addTo(layer);
     }

@@ -1,0 +1,21 @@
+{
+  "transcript": "I think a spark ignited in the forest. I'm camping in Silver Star Provincial Park in Vernon. Can you come check it out? I think it's serious. I'm seeing smoke east of the campgrounds.",
+  "location": {
+    "named_place": "Silver Star Provincial Park",
+    "latitude": 50.36,
+    "longitude": -119.06,
+    "detail": "east of the campgrounds"
+  },
+  "fire": {
+    "size": "unknown",
+    "spread": "unknown",
+    "out_of_control": true
+  },
+  "threat": {
+    "structures": false,
+    "lives": false,
+    "evacuation": false
+  },
+  "severity_score": 30,
+  "severity_reason": "Smoke spotted near a campground indicates an uncontained forest fire, but no active threat to structures or lives was explicitly reported."
+}

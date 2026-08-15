@@ -164,11 +164,22 @@ body {
 
 /* ---- Leaflet chrome ----------------------------------------------------- */
 
-/* Leaflet paints its container light grey by default, which flashes white before
-   tiles arrive and stays white if they never do. */
+/* Leaflet paints its container light grey (#ddd) by default. leaflet.css is imported
+   from the map component and therefore lands AFTER this file in the cascade, so at
+   equal specificity Leaflet wins — the override needs !important to stick, otherwise
+   bare grey shows through anywhere tiles are missing. */
 .leaflet-container {
-  background: #0a0e13;
+  background: #0a0e13 !important;
   font-family: inherit;
+}
+
+/* Darkens the basemap so fire markers and wind fronts read against it. Done as a
+   filter on the tile pane rather than a world-spanning L.rectangle: a
+   [-90,-180]..[90,180] polygon exceeds usable SVG coordinate space once zoomed in and
+   renders as clipped grey blocks across the map. This affects tiles only, leaving
+   markers and vectors at full brightness. */
+.leaflet-tile-pane {
+  filter: brightness(0.85) saturate(0.95);
 }
 
 /* divIcons are declared with a zero-size box so the label can flow naturally from

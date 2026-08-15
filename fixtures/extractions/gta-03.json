@@ -1,9 +1,0 @@
-{
-  "landmarks": [{ "name": "the zoo", "relation": "past" }],
-  "direction": { "compass": "SE", "relative": "to the southeast, back in the Rouge valley" },
-  "distance_hint": { "value": 0, "unit": "none", "vagueness": "none" },
-  "smoke": { "color": "grey", "volume": "column", "drift_direction": "" },
-  "description_specificity": 0.55,
-  "secondhand": false,
-  "notes": "Landmark with a clear beyond-relation which bounds the near edge of the search area; no distance stated but caller reports rapid growth."
-}
