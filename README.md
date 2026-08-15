@@ -1,14 +1,13 @@
 # EmberAlert
 
-Turns emergency wildfire calls into a ranked response plan.
+Given the recent wildfire incidents in North America, we were inspired to explore potential ways to help firefighting and/or rescue efforts. More specifically, we wanted to focus on improving the communication and organization between firefighters, leading us to create EmberAlert
 
 ## What it does
 
 When several wildfires are burning at once, dispatchers have to decide which one to send
-crews to first. EmberAlert listens to the 911 call recordings, works out where each fire
-is, scores how dangerous it is, and puts them in priority order on a map. Calls about the
-same fire are merged automatically, and a fire that several people report independently
-is treated as more urgent.
+crews to first. EmberAlert uses the Gemini API to listen to calls and analyze them through tone, location, urgency, and volume of calls, and displays them on a map in real time. We then pair it with wind speed data from Open-Meteo Weather API to rank incidents based on severity and distance.
+
+
 
 ## Quick start
 
@@ -18,7 +17,7 @@ npm run dev
 ```
 
 Open [localhost:3000](http://localhost:3000) and click **Analyse all calls**. No API key
-is needed — the repo ships with saved Gemini results so it works straight away.
+is needed; the repo ships with saved Gemini results so it works straight away.
 
 ## How it works
 
@@ -77,10 +76,9 @@ npm run lint      # eslint
 
 ## A note on scoring
 
-Severity scores the **fire**, never the caller. A panicking caller and a calm caller
+Severity scores the **fire**, not the caller. A panicking caller and a calm caller
 reporting the same fire get the same score, because the ranking reflects danger rather
-than how someone sounds under pressure. Scoring people on how clearly they speak under
-stress would penalise exactly the callers most likely to be in trouble.
+than how someone sounds under pressure.
 
 ## Built with
 
