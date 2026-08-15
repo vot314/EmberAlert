@@ -198,15 +198,17 @@ export default function Page() {
   return (
     <main className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>
       <header
-        className="flex shrink-0 items-center justify-between border-b px-5 py-2.5"
+        className="flex shrink-0 items-center justify-between border-b px-4 py-2"
         style={{ borderColor: "var(--line)" }}
       >
         <div className="flex items-baseline gap-3">
-          <h1 className="text-[15px] font-semibold tracking-tight text-[color:var(--text)]">
-            Ember<span className="text-[color:var(--text-dim)]">Alert</span>
+          <h1 className="text-[17px] font-extrabold tracking-tight">
+            EMBER<span style={{ color: "var(--sev-critical)" }}>ALERT</span>
           </h1>
-          <span className="eyebrow">Wildfire Call Triage</span>
-          <span className="num text-[10px] text-[color:var(--text-faint)]">
+          <span className="text-[11px] font-semibold text-[color:var(--text-dim)]">
+            Wildfire Call Triage
+          </span>
+          <span className="num text-[11px] text-[color:var(--text-faint)]">
             {SCENARIO.region}
           </span>
         </div>
@@ -215,64 +217,56 @@ export default function Page() {
           <button
             onClick={runAll}
             disabled={running}
-            className="border px-3 py-1.5 text-[11px] font-medium tracking-wide transition-colors disabled:opacity-40"
-            style={{
-              borderColor: running ? "var(--line)" : "#3d4550",
-              background: "var(--panel-raised)",
-              color: "var(--text)",
-            }}
+            className="pill px-4 py-1.5 text-[12px] disabled:opacity-50"
+            style={{ background: "var(--accent-navy)" }}
           >
             {running ? "Analysing…" : "Analyse all calls"}
           </button>
           <button
             onClick={reset}
             disabled={running}
-            className="border px-3 py-1.5 text-[11px] tracking-wide text-[color:var(--text-dim)] transition-colors hover:text-[color:var(--text)] disabled:opacity-40"
-            style={{ borderColor: "var(--line)" }}
+            className="pill px-4 py-1.5 text-[12px] disabled:opacity-50"
+            style={{ background: "#888888" }}
           >
             Reset
           </button>
 
-          <span className="mx-1 h-4 w-px" style={{ background: "var(--line)" }} />
+          <span className="mx-1 h-5 w-px" style={{ background: "var(--line)" }} />
 
           <button
             onClick={() => setShowWind((v) => !v)}
-            className="border px-3 py-1.5 text-[11px] tracking-wide transition-colors"
+            className="pill px-4 py-1.5 text-[12px]"
             style={{
-              borderColor: showWind ? "#3d4550" : "var(--line)",
-              color: showWind ? "var(--text)" : "var(--text-faint)",
-              background: showWind ? "var(--panel-raised)" : "transparent",
+              background: showWind ? "var(--accent)" : "#bdbdbd",
             }}
           >
-            Wind fronts <span className="num ml-1">{showWind ? "on" : "off"}</span>
+            Wind fronts {showWind ? "on" : "off"}
           </button>
 
-          <div
-            className="flex items-center border"
-            style={{ borderColor: "var(--line)" }}
-          >
-            {["ALL", "CRITICAL", "HIGH", "MODERATE", "LOW"].map((level) => (
-              <button
-                key={level}
-                onClick={() => setSeverityFilter(level)}
-                className="px-2.5 py-1.5 text-[10px] font-medium tracking-wider transition-colors"
-                style={{
-                  background:
-                    severityFilter === level ? "var(--panel-raised)" : "transparent",
-                  color:
-                    severityFilter === level ? "var(--text)" : "var(--text-faint)",
-                }}
-              >
-                {level}
-              </button>
-            ))}
+          <div className="flex items-center gap-1">
+            {["ALL", "CRITICAL", "HIGH", "MODERATE", "LOW"].map((level) => {
+              const active = severityFilter === level;
+              return (
+                <button
+                  key={level}
+                  onClick={() => setSeverityFilter(level)}
+                  className="pill px-3 py-1.5 text-[11px]"
+                  style={{
+                    background: active ? "var(--accent)" : "transparent",
+                    color: active ? "#ffffff" : "var(--text-dim)",
+                  }}
+                >
+                  {level}
+                </button>
+              );
+            })}
           </div>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         <aside
-          className="thin-scroll flex w-[360px] shrink-0 flex-col gap-6 overflow-y-auto border-r p-4"
+          className="thin-scroll flex w-[360px] shrink-0 flex-col gap-4 overflow-y-auto border-r p-3"
           style={{ borderColor: "var(--line)" }}
         >
           <IncidentList
@@ -283,8 +277,10 @@ export default function Page() {
 
           <CallQueue rows={queueRows} activeId={activeId} onPlay={onPlay} />
 
-          <p className="mt-auto border-t pt-3 text-[10px] leading-relaxed text-[color:var(--text-faint)]"
-             style={{ borderColor: "var(--line-soft)" }}>
+          <p
+            className="mt-auto border-t pt-2.5 text-[10.5px] leading-relaxed text-[color:var(--text-faint)]"
+            style={{ borderColor: "var(--line-soft)" }}
+          >
             Severity scores the fire, never the caller. A frightened caller and a composed
             caller reporting the same fire get the same score.
           </p>
@@ -301,52 +297,52 @@ export default function Page() {
             onSelectIncident={setSelectedId}
           />
 
-          {/* Distribution panel */}
           <div
-            className="pointer-events-none absolute bottom-4 left-4 z-[1000] w-[300px] border p-4"
-            style={{ background: "rgb(11 12 14 / 0.94)", borderColor: "var(--line)" }}
+            className="pointer-events-none absolute bottom-4 left-4 z-[1000] w-[300px] border shadow-sm"
+            style={{ background: "#ffffff", borderColor: "var(--line)" }}
           >
-            <div className="mb-3 flex items-baseline justify-between">
+            <div className="strip px-3 py-1.5">
               <span className="eyebrow">Severity Distribution</span>
             </div>
 
-            <SeverityChart counts={severityCounts} total={allIncidents.length} />
+            <div className="p-3">
+              <SeverityChart counts={severityCounts} total={allIncidents.length} />
 
-            {windData && (
-              <div
-                className="num mt-3 flex items-baseline justify-between border-t pt-2.5 text-[10px]"
-                style={{ borderColor: "var(--line-soft)" }}
-              >
-                <span className="text-[color:var(--text-faint)]">REGIONAL WIND</span>
-                <span className="text-[color:var(--text-dim)]">
-                  {windData.directionCardinal} {windData.directionDeg}° · {windData.speedKmH} km/h
-                </span>
-              </div>
-            )}
+              {windData && (
+                <div
+                  className="num mt-3 flex items-baseline justify-between border-t pt-2 text-[10.5px]"
+                  style={{ borderColor: "var(--line-soft)" }}
+                >
+                  <span className="text-[color:var(--text-faint)]">REGIONAL WIND</span>
+                  <span className="font-bold text-[color:var(--text-dim)]">
+                    {windData.directionCardinal} {windData.directionDeg}&deg; ·{" "}
+                    {windData.speedKmH} km/h
+                  </span>
+                </div>
+              )}
 
-            {selectedIncident && (
-              <div
-                className="mt-2.5 border-t pt-2.5"
-                style={{ borderColor: "var(--line-soft)" }}
-              >
-                <div className="num text-[10px] text-[color:var(--text-faint)]">
-                  PRIORITY {String(selectedIncident.rank).padStart(2, "0")} ·{" "}
-                  {selectedIncident.location.lat.toFixed(3)}N{" "}
-                  {Math.abs(selectedIncident.location.lng).toFixed(3)}W
+              {selectedIncident && (
+                <div
+                  className="mt-2.5 border-t pt-2.5"
+                  style={{ borderColor: "var(--line-soft)" }}
+                >
+                  <div className="num text-[10px] text-[color:var(--text-faint)]">
+                    PRIORITY {String(selectedIncident.rank).padStart(2, "0")} ·{" "}
+                    {selectedIncident.location.lat.toFixed(3)}&deg;N{" "}
+                    {Math.abs(selectedIncident.location.lng).toFixed(3)}&deg;W
+                  </div>
+                  <div className="mt-0.5 text-[12.5px] font-bold">{selectedIncident.name}</div>
+                  {selectedIncident.transcripts.map((t, i) => (
+                    <p
+                      key={i}
+                      className="mt-1 text-[10.5px] italic leading-snug text-[color:var(--text-dim)]"
+                    >
+                      &ldquo;{t}&rdquo;
+                    </p>
+                  ))}
                 </div>
-                <div className="mt-0.5 text-[12px] font-medium text-[color:var(--text)]">
-                  {selectedIncident.name}
-                </div>
-                {selectedIncident.transcripts.map((t, i) => (
-                  <p
-                    key={i}
-                    className="mt-1 text-[10px] italic leading-snug text-[color:var(--text-faint)]"
-                  >
-                    &ldquo;{t}&rdquo;
-                  </p>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </section>
       </div>

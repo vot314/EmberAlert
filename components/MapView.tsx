@@ -16,17 +16,19 @@ type Props = {
   onSelectIncident?: (id: string) => void;
 };
 
-const ESRI_IMAGERY =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-
-const CARTO_LABELS =
-  "https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}.png";
+/**
+ * Carto Positron: a light, low-chroma basemap with labels baked in, so no separate
+ * label overlay is needed. Satellite imagery was dropped for the light interface — a
+ * photographic basemap competes with the data, and the incidents and wind vectors
+ * should be the only saturated things on screen.
+ */
+const CARTO_LIGHT = "https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png";
 
 const SEVERITY_COLORS: Record<IncidentSeverity, { bg: string; border: string; glow: string }> = {
-  Critical: { bg: "#ef4444", border: "#7f1d1d", glow: "rgba(239, 68, 68, 0.6)" },
-  High: { bg: "#f97316", border: "#7c2d12", glow: "rgba(249, 115, 22, 0.5)" },
-  Moderate: { bg: "#f59e0b", border: "#78350f", glow: "rgba(245, 158, 11, 0.4)" },
-  Low: { bg: "#10b981", border: "#064e3b", glow: "rgba(16, 185, 129, 0.3)" },
+  Critical: { bg: "#aa0000", border: "#6b0000", glow: "rgba(170, 0, 0, 0.35)" },
+  High: { bg: "#e06c00", border: "#8a4200", glow: "rgba(224, 108, 0, 0.3)" },
+  Moderate: { bg: "#b8860b", border: "#7a5807", glow: "rgba(184, 134, 11, 0.28)" },
+  Low: { bg: "#2e8b57", border: "#1c5735", glow: "rgba(46, 139, 87, 0.25)" },
 };
 
 export default function MapView({
@@ -66,14 +68,9 @@ export default function MapView({
     });
     mapRef.current = map;
 
-    L.tileLayer(ESRI_IMAGERY, {
-      maxZoom: 18,
-      attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
-    }).addTo(map);
-    L.tileLayer(CARTO_LABELS, {
-      maxZoom: 18,
-      className: "sf-labels",
-      attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
+    L.tileLayer(CARTO_LIGHT, {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors, &copy; CARTO",
     }).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
@@ -148,8 +145,8 @@ export default function MapView({
               transform: rotate(${angleDeg.toFixed(1)}deg);
               pointer-events: none;
             ">
-              <svg width="${triangleSize}" height="${triangleSize}" viewBox="0 0 12 12" fill="none" style="filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.9));">
-                <polygon points="6,1 11,11 1,11" fill="${front.color}" stroke="#ffffff" stroke-width="1.2" />
+              <svg width="${triangleSize}" height="${triangleSize}" viewBox="0 0 12 12" fill="none" style="filter: drop-shadow(0px 1px 1.5px rgba(255,255,255,0.9));">
+                <polygon points="6,1 11,11 1,11" fill="${front.color}" stroke="#ffffff" stroke-width="0.9" />
               </svg>
             </div>
           `,
@@ -182,7 +179,7 @@ export default function MapView({
             font-size: ${Math.max(9, Math.min(11, zoomLevel))}px;
             font-weight: 700;
             letter-spacing: 0.05em;
-            text-shadow: 0 1px 3px #000000, 0 0 6px #000000, 0 0 10px #000000;
+            text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff, 0 1px 2px rgba(255,255,255,0.95);
             white-space: nowrap;
             pointer-events: none;
             user-select: none;
@@ -210,10 +207,11 @@ export default function MapView({
     for (const inc of incidents) {
       const colors = SEVERITY_COLORS[inc.severity] || SEVERITY_COLORS.Moderate;
       const isSelected = inc.id === selectedId;
-      // Floor plus linear term: the floor keeps a low-severity fire legible at
-      // province scale, the linear term makes the difference between a 20 and a 100
-      // obvious at a glance.
-      const radiusMeters = 10_000 + inc.score * 700;
+      // Eased rather than linear. A linear ramp made the Critical ring so large it
+      // swallowed its neighbours, so growth tapers towards the top of the scale: the
+      // low end is barely changed while a score of 100 comes in appreciably tighter.
+      const t = Math.min(1, Math.max(0, inc.score / 100));
+      const radiusMeters = 8_000 + 52_000 * (1 - Math.pow(1 - t, 1.5));
 
       L.circle([inc.location.lat, inc.location.lng], {
         radius: radiusMeters,
@@ -248,7 +246,7 @@ export default function MapView({
             height: ${isSelected ? "28px" : "20px"};
             border-radius: 50%;
             background-color: ${colors.bg};
-            border: 2px solid ${isSelected ? "#ffffff" : colors.border};
+            border: 2px solid ${isSelected ? "#111111" : colors.border};
             box-shadow: 0 0 14px ${colors.glow};
             display: flex;
             align-items: center;
@@ -257,7 +255,7 @@ export default function MapView({
           ">
             <span style="
               font: 700 ${isSelected ? "13px" : "11px"}/1 ui-sans-serif, system-ui, sans-serif;
-              color: #0f172a;
+              color: #ffffff;
             ">${inc.rank}</span>
           </div>
           <div class="ember-label" style="
@@ -266,14 +264,14 @@ export default function MapView({
             left: 50%;
             transform: translateX(-50%);
             white-space: nowrap;
-            background: rgba(15, 23, 42, 0.95);
-            color: #f8fafc;
+            background: #ffffff;
+            color: #111111;
             font-size: 11px;
             font-weight: 600;
             padding: 2px 7px;
             border-radius: 4px;
-            border: 1px solid ${isSelected ? "#38bdf8" : "#334155"};
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+            border: 1px solid ${isSelected ? colors.bg : "#c9c9c9"};
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18);
             pointer-events: none;
             opacity: ${nametagOpacity};
             transition: opacity 0.25s ease-in-out;

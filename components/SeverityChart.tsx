@@ -4,10 +4,10 @@ import type { IncidentSeverity } from "./IncidentList";
 
 /** Band order runs most severe first, so the ring reads clockwise from worst to least. */
 const BANDS: { key: IncidentSeverity; color: string }[] = [
-  { key: "Critical", color: "#ef4444" },
-  { key: "High", color: "#f97316" },
-  { key: "Moderate", color: "#f59e0b" },
-  { key: "Low", color: "#10b981" },
+  { key: "Critical", color: "#aa0000" },
+  { key: "High", color: "#e06c00" },
+  { key: "Moderate", color: "#b8860b" },
+  { key: "Low", color: "#2e8b57" },
 ];
 
 const SIZE = 104;
@@ -48,7 +48,7 @@ export default function SeverityChart({
           cy={SIZE / 2}
           r={RADIUS}
           fill="none"
-          stroke="#1c2127"
+          stroke="#e6e6e6"
           strokeWidth={STROKE}
         />
 
@@ -83,8 +83,8 @@ export default function SeverityChart({
             y="50%"
             textAnchor="middle"
             dominantBaseline="central"
-            className="fill-neutral-100 font-mono"
-            style={{ fontSize: 21, fontWeight: 500 }}
+            className="font-mono"
+            style={{ fontSize: 21, fontWeight: 700, fill: "#111111" }}
           >
             {total}
           </text>
@@ -96,17 +96,17 @@ export default function SeverityChart({
           <div key={key} className="flex items-baseline gap-2">
             <span
               className="h-2 w-2 shrink-0"
-              style={{ background: counts[key] ? color : "#2a3038" }}
+              style={{ background: counts[key] ? color : "#dcdcdc", borderRadius: 999 }}
             />
             <dt
               className="flex-1 text-[11px] tracking-wide"
-              style={{ color: counts[key] ? "#c9ced6" : "#5c646e" }}
+              style={{ color: counts[key] ? "#111111" : "#9a9a9a", fontWeight: 500 }}
             >
               {key}
             </dt>
             <dd
               className="font-mono text-[12px] tabular-nums"
-              style={{ color: counts[key] ? color : "#5c646e" }}
+              style={{ color: counts[key] ? color : "#9a9a9a", fontWeight: 700 }}
             >
               {counts[key]}
             </dd>

@@ -18,11 +18,13 @@ export type Incident = {
   transcripts: string[];
 };
 
+/** Sampled from the reference feed: its fire-badge red and active-filter green, with
+ *  two matching middle steps. */
 export const SEVERITY_HUE: Record<IncidentSeverity, string> = {
-  Critical: "#ef4444",
-  High: "#f97316",
-  Moderate: "#f59e0b",
-  Low: "#10b981",
+  Critical: "#aa0000",
+  High: "#e06c00",
+  Moderate: "#b8860b",
+  Low: "#2e8b57",
 };
 
 type Props = {
@@ -34,28 +36,28 @@ type Props = {
 export default function IncidentList({ incidents, selectedId, onSelectIncident }: Props) {
   return (
     <section>
-      <div className="mb-2.5 flex items-baseline justify-between">
+      <div className="strip flex items-baseline justify-between px-2.5 py-1.5">
         <h2 className="eyebrow">Response Priority</h2>
         {selectedId ? (
           <button
             onClick={() => onSelectIncident(null)}
-            className="text-[10px] tracking-wide text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
+            className="text-[11px] font-medium text-[color:var(--accent-navy)] hover:underline"
           >
             clear
           </button>
         ) : (
-          <span className="num text-[10px] text-[color:var(--text-faint)]">
+          <span className="num text-[11px] text-[color:var(--text-faint)]">
             {incidents.length}
           </span>
         )}
       </div>
 
       {incidents.length === 0 ? (
-        <p className="border border-dashed border-[color:var(--line)] px-3 py-5 text-center text-[11px] text-[color:var(--text-faint)]">
+        <p className="border-x border-b border-[color:var(--line)] px-3 py-5 text-center text-[12px] text-[color:var(--text-faint)]">
           No incidents yet. Analyse the call queue.
         </p>
       ) : (
-        <ul className="border-t border-[color:var(--line-soft)]">
+        <ul className="border-x border-b border-[color:var(--line)]">
           {incidents.map((incident) => {
             const hue = SEVERITY_HUE[incident.severity];
             const isSelected = incident.id === selectedId;
@@ -64,49 +66,42 @@ export default function IncidentList({ incidents, selectedId, onSelectIncident }
               <li key={incident.id}>
                 <button
                   onClick={() => onSelectIncident(incident.id)}
-                  className="w-full border-b border-[color:var(--line-soft)] px-0 py-2.5 text-left transition-colors"
-                  style={{ background: isSelected ? "var(--panel-raised)" : "transparent" }}
+                  className="w-full border-b border-[color:var(--line-soft)] px-2.5 py-2 text-left last:border-b-0"
+                  style={{ background: isSelected ? "var(--highlight)" : "transparent" }}
                 >
-                  <div className="flex items-stretch gap-2.5">
-                    {/* Severity rendered as a rule, not a pill — reads as an instrument
-                        scale rather than a badge. */}
+                  <div className="flex items-center gap-2">
+                    <span className="num text-[11px] text-[color:var(--text-faint)]">
+                      {String(incident.rank).padStart(2, "0")}
+                    </span>
                     <span
-                      className="w-[3px] shrink-0"
-                      style={{ background: hue, opacity: isSelected ? 1 : 0.7 }}
-                    />
+                      className="pill px-2 py-[3px] text-[10px]"
+                      style={{ background: hue }}
+                    >
+                      {incident.severity}
+                    </span>
+                    <h3
+                      className="min-w-0 flex-1 truncate text-[13px]"
+                      style={{ fontWeight: isSelected ? 700 : 600 }}
+                    >
+                      {incident.name}
+                    </h3>
+                    <span className="num text-[13px] font-bold" style={{ color: hue }}>
+                      {incident.score}
+                    </span>
+                  </div>
 
-                    <div className="min-w-0 flex-1 pr-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="num text-[10px] text-[color:var(--text-faint)]">
-                          {String(incident.rank).padStart(2, "0")}
-                        </span>
-                        <h3
-                          className="min-w-0 flex-1 truncate text-[13px] font-medium"
-                          style={{ color: isSelected ? "#fff" : "var(--text)" }}
-                        >
-                          {incident.name}
-                        </h3>
-                        <span className="num text-[12px]" style={{ color: hue }}>
-                          {incident.score}
-                        </span>
-                      </div>
+                  <p className="mt-1 text-[11.5px] leading-snug text-[color:var(--text-dim)]">
+                    {incident.reason}
+                  </p>
 
-                      <p className="mt-1 text-[11px] leading-snug text-[color:var(--text-dim)]">
-                        {incident.reason}
-                      </p>
-
-                      <div className="num mt-1.5 flex items-center gap-2 text-[10px] text-[color:var(--text-faint)]">
-                        <span style={{ color: hue }}>{incident.severity.toLowerCase()}</span>
-                        <span>·</span>
-                        <span>
-                          {incident.callCount} {incident.callCount === 1 ? "call" : "calls"}
-                        </span>
-                        <span className="ml-auto">
-                          {incident.location.lat.toFixed(2)}N{" "}
-                          {Math.abs(incident.location.lng).toFixed(2)}W
-                        </span>
-                      </div>
-                    </div>
+                  <div className="num mt-1 flex items-center gap-2 text-[10.5px] text-[color:var(--text-faint)]">
+                    <span>
+                      {incident.callCount} {incident.callCount === 1 ? "call" : "calls"}
+                    </span>
+                    <span className="ml-auto">
+                      {incident.location.lat.toFixed(3)}&deg;N{" "}
+                      {Math.abs(incident.location.lng).toFixed(3)}&deg;W
+                    </span>
                   </div>
                 </button>
               </li>
@@ -152,33 +147,34 @@ export function CallQueue({
 
   return (
     <section>
-      <div className="mb-2.5 flex items-baseline justify-between">
+      <div className="strip flex items-baseline justify-between px-2.5 py-1.5">
         <h2 className="eyebrow">Call Queue</h2>
-        <span className="num text-[10px] text-[color:var(--text-faint)]">
+        <span className="num text-[11px] text-[color:var(--text-faint)]">
           {done}/{rows.length}
         </span>
       </div>
 
-      <ul className="border-t border-[color:var(--line-soft)]">
+      <ul className="border-x border-b border-[color:var(--line)]">
         {rows.map((r) => (
           <li
             key={r.id}
-            className="flex items-center gap-2.5 border-b border-[color:var(--line-soft)] py-2"
-            style={{ background: r.id === activeId ? "var(--panel-raised)" : "transparent" }}
+            className="flex items-center gap-2 border-b border-[color:var(--line-soft)] px-2.5 py-1.5 last:border-b-0"
+            style={{ background: r.id === activeId ? "var(--highlight)" : "transparent" }}
           >
             <button
               onClick={() => onPlay(r.id)}
               aria-label={`Play ${r.id}`}
               title="Play recording"
-              className="grid h-6 w-6 shrink-0 place-items-center border border-[color:var(--line)] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--text-faint)] hover:text-[color:var(--text)]"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-white transition-opacity hover:opacity-80"
+              style={{ background: "var(--accent-navy)" }}
             >
               <PlayIcon />
             </button>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[12px] text-[color:var(--text)]">{r.label}</div>
+              <div className="truncate text-[12px] font-medium">{r.label}</div>
               {r.error ? (
-                <div className="num truncate text-[10px] text-red-400" title={r.error}>
+                <div className="num truncate text-[10px] text-[color:var(--sev-critical)]" title={r.error}>
                   {r.error}
                 </div>
               ) : (
@@ -195,12 +191,12 @@ export function CallQueue({
             </div>
 
             {r.score !== null && (
-              <span className="num shrink-0 text-[11px] text-[color:var(--text-dim)]">
+              <span className="num shrink-0 text-[12px] font-bold text-[color:var(--text-dim)]">
                 {r.score}
               </span>
             )}
             {r.state === "analyzing" && (
-              <span className="h-1 w-1 shrink-0 animate-pulse rounded-full bg-[color:var(--text-dim)]" />
+              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[color:var(--accent-navy)]" />
             )}
           </li>
         ))}
