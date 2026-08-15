@@ -18,27 +18,11 @@ export type Incident = {
   transcripts: string[];
 };
 
-const SEVERITY_BADGE: Record<IncidentSeverity, { label: string; cls: string; dot: string }> = {
-  Critical: {
-    label: "Critical",
-    cls: "bg-red-950/80 text-red-300 ring-red-700/80",
-    dot: "bg-red-500 animate-ping",
-  },
-  High: {
-    label: "High",
-    cls: "bg-orange-950/80 text-orange-300 ring-orange-700/80",
-    dot: "bg-orange-500",
-  },
-  Moderate: {
-    label: "Moderate",
-    cls: "bg-amber-950/80 text-amber-300 ring-amber-700/80",
-    dot: "bg-amber-400",
-  },
-  Low: {
-    label: "Low",
-    cls: "bg-emerald-950/80 text-emerald-300 ring-emerald-700/80",
-    dot: "bg-emerald-400",
-  },
+export const SEVERITY_HUE: Record<IncidentSeverity, string> = {
+  Critical: "#ef4444",
+  High: "#f97316",
+  Moderate: "#f59e0b",
+  Low: "#10b981",
 };
 
 type Props = {
@@ -49,77 +33,88 @@ type Props = {
 
 export default function IncidentList({ incidents, selectedId, onSelectIncident }: Props) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Response Priority ({incidents.length})
-        </h2>
-        {selectedId && (
+    <section>
+      <div className="mb-2.5 flex items-baseline justify-between">
+        <h2 className="eyebrow">Response Priority</h2>
+        {selectedId ? (
           <button
             onClick={() => onSelectIncident(null)}
-            className="text-[11px] text-sky-400 hover:text-sky-300"
+            className="text-[10px] tracking-wide text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
           >
-            Clear selection
+            clear
           </button>
+        ) : (
+          <span className="num text-[10px] text-[color:var(--text-faint)]">
+            {incidents.length}
+          </span>
         )}
       </div>
 
-      {incidents.length === 0 && (
-        <p className="rounded-lg border border-dashed border-slate-800 px-3 py-6 text-center text-[11px] text-slate-600">
-          No incidents yet — run the call queue below.
+      {incidents.length === 0 ? (
+        <p className="border border-dashed border-[color:var(--line)] px-3 py-5 text-center text-[11px] text-[color:var(--text-faint)]">
+          No incidents yet. Analyse the call queue.
         </p>
-      )}
+      ) : (
+        <ul className="border-t border-[color:var(--line-soft)]">
+          {incidents.map((incident) => {
+            const hue = SEVERITY_HUE[incident.severity];
+            const isSelected = incident.id === selectedId;
 
-      <ul className="flex flex-col gap-2">
-        {incidents.map((incident) => {
-          const badge = SEVERITY_BADGE[incident.severity];
-          const isSelected = incident.id === selectedId;
-
-          return (
-            <li
-              key={incident.id}
-              onClick={() => onSelectIncident(incident.id)}
-              className={`group cursor-pointer rounded-lg border p-3 transition-all ${
-                isSelected
-                  ? "border-sky-500 bg-slate-900/90 shadow-md ring-1 ring-sky-500/50"
-                  : "border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900/80"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-800 text-[10px] font-bold text-slate-200 ring-1 ring-slate-700">
-                    {incident.rank}
-                  </span>
-                  <span className="relative flex h-2.5 w-2.5 shrink-0">
-                    <span className={`inline-flex h-full w-full rounded-full ${badge.dot}`} />
-                  </span>
-                  <h3 className="truncate text-sm font-medium text-slate-100 group-hover:text-white">
-                    {incident.name}
-                  </h3>
-                </div>
-                <span
-                  className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold tracking-wide ring-1 ${badge.cls}`}
+            return (
+              <li key={incident.id}>
+                <button
+                  onClick={() => onSelectIncident(incident.id)}
+                  className="w-full border-b border-[color:var(--line-soft)] px-0 py-2.5 text-left transition-colors"
+                  style={{ background: isSelected ? "var(--panel-raised)" : "transparent" }}
                 >
-                  {badge.label}
-                </span>
-              </div>
+                  <div className="flex items-stretch gap-2.5">
+                    {/* Severity rendered as a rule, not a pill — reads as an instrument
+                        scale rather than a badge. */}
+                    <span
+                      className="w-[3px] shrink-0"
+                      style={{ background: hue, opacity: isSelected ? 1 : 0.7 }}
+                    />
 
-              <p className="mt-2 text-[11px] leading-snug text-slate-400">{incident.reason}</p>
+                    <div className="min-w-0 flex-1 pr-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="num text-[10px] text-[color:var(--text-faint)]">
+                          {String(incident.rank).padStart(2, "0")}
+                        </span>
+                        <h3
+                          className="min-w-0 flex-1 truncate text-[13px] font-medium"
+                          style={{ color: isSelected ? "#fff" : "var(--text)" }}
+                        >
+                          {incident.name}
+                        </h3>
+                        <span className="num text-[12px]" style={{ color: hue }}>
+                          {incident.score}
+                        </span>
+                      </div>
 
-              <div className="mt-2 flex items-center justify-between font-mono text-[11px] text-slate-400">
-                <span className="text-slate-500">
-                  severity {incident.score}
-                  {incident.callCount > 1 && ` · ${incident.callCount} calls`}
-                </span>
-                <span>
-                  {incident.location.lat.toFixed(3)}°N, {Math.abs(incident.location.lng).toFixed(3)}°W
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+                      <p className="mt-1 text-[11px] leading-snug text-[color:var(--text-dim)]">
+                        {incident.reason}
+                      </p>
+
+                      <div className="num mt-1.5 flex items-center gap-2 text-[10px] text-[color:var(--text-faint)]">
+                        <span style={{ color: hue }}>{incident.severity.toLowerCase()}</span>
+                        <span>·</span>
+                        <span>
+                          {incident.callCount} {incident.callCount === 1 ? "call" : "calls"}
+                        </span>
+                        <span className="ml-auto">
+                          {incident.location.lat.toFixed(2)}N{" "}
+                          {Math.abs(incident.location.lng).toFixed(2)}W
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -136,56 +131,60 @@ export type QueueRow = {
   error: string | null;
 };
 
+function PlayIcon() {
+  return (
+    <svg width="8" height="9" viewBox="0 0 8 9" aria-hidden="true">
+      <path d="M0 0.5 L8 4.5 L0 8.5 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function CallQueue({
   rows,
   activeId,
   onPlay,
-  disabled,
 }: {
   rows: QueueRow[];
   activeId: string | null;
   onPlay: (id: string) => void;
-  disabled: boolean;
 }) {
   const done = rows.filter((r) => r.state === "done").length;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Call Queue ({done}/{rows.length})
-        </h2>
+    <section>
+      <div className="mb-2.5 flex items-baseline justify-between">
+        <h2 className="eyebrow">Call Queue</h2>
+        <span className="num text-[10px] text-[color:var(--text-faint)]">
+          {done}/{rows.length}
+        </span>
       </div>
 
-      <ul className="flex flex-col gap-1.5">
+      <ul className="border-t border-[color:var(--line-soft)]">
         {rows.map((r) => (
           <li
             key={r.id}
-            className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors ${
-              r.id === activeId
-                ? "border-sky-600 bg-sky-950/40"
-                : "border-slate-800 bg-slate-900/50"
-            }`}
+            className="flex items-center gap-2.5 border-b border-[color:var(--line-soft)] py-2"
+            style={{ background: r.id === activeId ? "var(--panel-raised)" : "transparent" }}
           >
             <button
               onClick={() => onPlay(r.id)}
-              disabled={disabled}
               aria-label={`Play ${r.id}`}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-slate-700 text-[10px] text-slate-300 transition-colors hover:border-sky-600 hover:text-sky-300 disabled:opacity-40"
+              title="Play recording"
+              className="grid h-6 w-6 shrink-0 place-items-center border border-[color:var(--line)] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--text-faint)] hover:text-[color:var(--text)]"
             >
-              ▶
+              <PlayIcon />
             </button>
 
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[12px] text-slate-200">{r.label}</div>
+              <div className="truncate text-[12px] text-[color:var(--text)]">{r.label}</div>
               {r.error ? (
-                <div className="truncate font-mono text-[10px] text-red-400" title={r.error}>
+                <div className="num truncate text-[10px] text-red-400" title={r.error}>
                   {r.error}
                 </div>
               ) : (
-                <div className="truncate font-mono text-[10px] text-slate-500">
+                <div className="num truncate text-[10px] text-[color:var(--text-faint)]">
                   {r.state === "analyzing"
-                    ? "Gemini analyzing…"
+                    ? "analysing"
                     : r.state === "done"
                       ? `${r.place ?? "located"}${r.source ? ` · ${r.source}` : ""}${
                           r.latencyMs ? ` · ${(r.latencyMs / 1000).toFixed(1)}s` : ""
@@ -196,16 +195,16 @@ export function CallQueue({
             </div>
 
             {r.score !== null && (
-              <span className="shrink-0 font-mono text-[11px] font-semibold text-slate-300">
+              <span className="num shrink-0 text-[11px] text-[color:var(--text-dim)]">
                 {r.score}
               </span>
             )}
             {r.state === "analyzing" && (
-              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-sky-400" />
+              <span className="h-1 w-1 shrink-0 animate-pulse rounded-full bg-[color:var(--text-dim)]" />
             )}
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

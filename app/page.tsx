@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import manifest from "@/data/reports.json";
 import IncidentList, { CallQueue, type Incident, type QueueRow } from "@/components/IncidentList";
+import SeverityChart from "@/components/SeverityChart";
 import { fetchRealtimeWind, type WindData } from "@/lib/wind";
 import type { FireReport } from "@/lib/schema";
 import { analyzeReport, rankFires, severityBand, type AnalyzedReport } from "@/lib/fires";
@@ -195,69 +196,72 @@ export default function Page() {
   }
 
   return (
-    <main className="flex h-screen flex-col bg-[#0a0e13] text-slate-200">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-5 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-600/20 text-orange-500 ring-1 ring-orange-500/40">
-            🔥
-          </div>
-          <div>
-            <h1 className="text-base font-bold tracking-wide text-slate-100">
-              EmberAlert
-              <span className="ml-2.5 text-xs font-normal text-slate-400">
-                Wildfire Call Triage &amp; Prioritization
-              </span>
-            </h1>
-            <p className="text-[11px] text-slate-500">{SCENARIO.region}</p>
-          </div>
+    <main className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>
+      <header
+        className="flex shrink-0 items-center justify-between border-b px-5 py-2.5"
+        style={{ borderColor: "var(--line)" }}
+      >
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-[15px] font-semibold tracking-tight text-[color:var(--text)]">
+            Ember<span className="text-[color:var(--text-dim)]">Alert</span>
+          </h1>
+          <span className="eyebrow">Wildfire Call Triage</span>
+          <span className="num text-[10px] text-[color:var(--text-faint)]">
+            {SCENARIO.region}
+          </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={runAll}
             disabled={running}
-            className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-500 disabled:opacity-40"
+            className="border px-3 py-1.5 text-[11px] font-medium tracking-wide transition-colors disabled:opacity-40"
+            style={{
+              borderColor: running ? "var(--line)" : "#3d4550",
+              background: "var(--panel-raised)",
+              color: "var(--text)",
+            }}
           >
-            {running ? "analyzing…" : "Analyze all calls"}
+            {running ? "Analysing…" : "Analyse all calls"}
           </button>
           <button
             onClick={reset}
             disabled={running}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-slate-600 disabled:opacity-40"
+            className="border px-3 py-1.5 text-[11px] tracking-wide text-[color:var(--text-dim)] transition-colors hover:text-[color:var(--text)] disabled:opacity-40"
+            style={{ borderColor: "var(--line)" }}
           >
             Reset
           </button>
 
-          {/* Technical Wind Vector Toggle */}
+          <span className="mx-1 h-4 w-px" style={{ background: "var(--line)" }} />
+
           <button
             onClick={() => setShowWind((v) => !v)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-              showWind
-                ? "border-sky-500 bg-sky-950/60 text-sky-200 ring-1 ring-sky-500/50 shadow-sm"
-                : "border-slate-800 bg-slate-900/80 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-            }`}
+            className="border px-3 py-1.5 text-[11px] tracking-wide transition-colors"
+            style={{
+              borderColor: showWind ? "#3d4550" : "var(--line)",
+              color: showWind ? "var(--text)" : "var(--text-faint)",
+              background: showWind ? "var(--panel-raised)" : "transparent",
+            }}
           >
-            <span className="text-sm">💨</span>
-            <span>Wind Fronts:</span>
-            <span
-              className={`font-mono text-[11px] font-bold ${showWind ? "text-sky-400" : "text-slate-500"}`}
-            >
-              {showWind ? "ON" : "OFF"}
-            </span>
+            Wind fronts <span className="num ml-1">{showWind ? "on" : "off"}</span>
           </button>
 
-          {/* Severity Filter Controls */}
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/80 p-1 text-xs">
-            <span className="px-2 py-0.5 text-[11px] font-medium text-slate-400">Filter:</span>
+          <div
+            className="flex items-center border"
+            style={{ borderColor: "var(--line)" }}
+          >
             {["ALL", "CRITICAL", "HIGH", "MODERATE", "LOW"].map((level) => (
               <button
                 key={level}
                 onClick={() => setSeverityFilter(level)}
-                className={`rounded px-2.5 py-1 text-[11px] font-medium transition-all ${
-                  severityFilter === level
-                    ? "bg-sky-600 text-white shadow-sm"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                }`}
+                className="px-2.5 py-1.5 text-[10px] font-medium tracking-wider transition-colors"
+                style={{
+                  background:
+                    severityFilter === level ? "var(--panel-raised)" : "transparent",
+                  color:
+                    severityFilter === level ? "var(--text)" : "var(--text-faint)",
+                }}
               >
                 {level}
               </button>
@@ -267,24 +271,22 @@ export default function Page() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[380px] shrink-0 flex-col gap-5 overflow-y-auto border-r border-slate-800 p-4">
+        <aside
+          className="thin-scroll flex w-[360px] shrink-0 flex-col gap-6 overflow-y-auto border-r p-4"
+          style={{ borderColor: "var(--line)" }}
+        >
           <IncidentList
             incidents={incidents}
             selectedId={selectedId}
             onSelectIncident={setSelectedId}
           />
 
-          <CallQueue
-            rows={queueRows}
-            activeId={activeId}
-            onPlay={onPlay}
-            disabled={false}
-          />
+          <CallQueue rows={queueRows} activeId={activeId} onPlay={onPlay} />
 
-          <p className="mt-auto border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-auto border-t pt-3 text-[10px] leading-relaxed text-[color:var(--text-faint)]"
+             style={{ borderColor: "var(--line-soft)" }}>
             Severity scores the fire, never the caller. A frightened caller and a composed
-            caller reporting the same fire get the same score — the ranking reflects danger,
-            not how someone sounds under stress.
+            caller reporting the same fire get the same score.
           </p>
         </aside>
 
@@ -299,57 +301,47 @@ export default function Page() {
             onSelectIncident={setSelectedId}
           />
 
-          {/* Dashboard Stats Overlay */}
-          <div className="pointer-events-none absolute bottom-4 left-4 z-[1000] w-[320px] rounded-lg border border-slate-700/80 bg-slate-950/90 p-4 shadow-xl backdrop-blur">
-            <div className="mb-2.5 flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                Incident Summary
-              </span>
-              <span className="font-mono text-xs font-bold text-sky-400">
-                {allIncidents.length} Total
-              </span>
+          {/* Distribution panel */}
+          <div
+            className="pointer-events-none absolute bottom-4 left-4 z-[1000] w-[300px] border p-4"
+            style={{ background: "rgb(11 12 14 / 0.94)", borderColor: "var(--line)" }}
+          >
+            <div className="mb-3 flex items-baseline justify-between">
+              <span className="eyebrow">Severity Distribution</span>
             </div>
 
-            <dl className="grid grid-cols-2 gap-2 font-mono text-xs">
-              <div className="flex justify-between rounded border border-slate-800 bg-slate-900/60 p-2">
-                <dt className="text-slate-400">Critical</dt>
-                <dd className="font-semibold text-red-400">{severityCounts.Critical}</dd>
-              </div>
-              <div className="flex justify-between rounded border border-slate-800 bg-slate-900/60 p-2">
-                <dt className="text-slate-400">High</dt>
-                <dd className="font-semibold text-orange-400">{severityCounts.High}</dd>
-              </div>
-              <div className="flex justify-between rounded border border-slate-800 bg-slate-900/60 p-2">
-                <dt className="text-slate-400">Moderate</dt>
-                <dd className="font-semibold text-amber-400">{severityCounts.Moderate}</dd>
-              </div>
-              <div className="flex justify-between rounded border border-slate-800 bg-slate-900/60 p-2">
-                <dt className="text-slate-400">Low</dt>
-                <dd className="font-semibold text-emerald-400">{severityCounts.Low}</dd>
-              </div>
-            </dl>
+            <SeverityChart counts={severityCounts} total={allIncidents.length} />
 
-            {/* Real-time Wind Meter */}
             {windData && (
-              <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-2.5 font-mono text-xs">
-                <span className="text-slate-400">Live Regional Wind:</span>
-                <span className="font-semibold text-sky-300">
-                  {windData.directionCardinal} ({windData.directionDeg}°) @ {windData.speedKmH} km/h
+              <div
+                className="num mt-3 flex items-baseline justify-between border-t pt-2.5 text-[10px]"
+                style={{ borderColor: "var(--line-soft)" }}
+              >
+                <span className="text-[color:var(--text-faint)]">REGIONAL WIND</span>
+                <span className="text-[color:var(--text-dim)]">
+                  {windData.directionCardinal} {windData.directionDeg}° · {windData.speedKmH} km/h
                 </span>
               </div>
             )}
 
             {selectedIncident && (
-              <div className="mt-2.5 border-t border-slate-800 pt-2.5">
-                <div className="text-[11px] font-semibold text-slate-300">
-                  Priority #{selectedIncident.rank} · {selectedIncident.name}
+              <div
+                className="mt-2.5 border-t pt-2.5"
+                style={{ borderColor: "var(--line-soft)" }}
+              >
+                <div className="num text-[10px] text-[color:var(--text-faint)]">
+                  PRIORITY {String(selectedIncident.rank).padStart(2, "0")} ·{" "}
+                  {selectedIncident.location.lat.toFixed(3)}N{" "}
+                  {Math.abs(selectedIncident.location.lng).toFixed(3)}W
                 </div>
-                <div className="mt-1 font-mono text-[11px] text-slate-400">
-                  {selectedIncident.location.lat.toFixed(4)},{" "}
-                  {selectedIncident.location.lng.toFixed(4)} · severity {selectedIncident.score}
+                <div className="mt-0.5 text-[12px] font-medium text-[color:var(--text)]">
+                  {selectedIncident.name}
                 </div>
                 {selectedIncident.transcripts.map((t, i) => (
-                  <p key={i} className="mt-1 text-[10px] italic leading-snug text-slate-500">
+                  <p
+                    key={i}
+                    className="mt-1 text-[10px] italic leading-snug text-[color:var(--text-faint)]"
+                  >
                     &ldquo;{t}&rdquo;
                   </p>
                 ))}

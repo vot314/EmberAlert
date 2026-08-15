@@ -145,35 +145,60 @@ function generateDoubledGridPoints(centerLat: number, centerLng: number, baseSpe
 }
 
 /**
- * Generate 14 continuous wave front lines across doubled region with blue speed gradient
+ * Rows of wave fronts, and control points per front. Annotated as `number` rather than
+ * left to infer a literal type, so the divide-by-zero guard below stays live if these
+ * are ever tuned down.
+ */
+const FRONT_ROWS: number = 28;
+const FRONT_COLS: number = 29;
+/** Spacing between fronts and between control points, in degrees. */
+const FRONT_LAT_STEP = 0.16;
+const FRONT_LNG_STEP = 0.24;
+/** Speed spread across the field, slowest front to fastest, in km/h relative to base. */
+const SPEED_OFFSET_MIN = -12;
+const SPEED_OFFSET_MAX = 20;
+
+/**
+ * Generate the wave-front field: FRONT_ROWS curved lines, each of FRONT_COLS points,
+ * coloured by a blue speed gradient.
+ *
+ * Row and column counts are doubled relative to the original field, which at unchanged
+ * step size doubles the covered area in both dimensions while keeping front density the
+ * same.
+ *
+ * The per-front speed offset is computed from the row's normalised position rather than
+ * read from a fixed lookup table. The table previously had exactly one entry per front
+ * and was indexed positionally behind a non-null assertion, so raising the front count
+ * ran off the end and produced NaN speeds — which propagate into the gradient colour and
+ * the on-map labels.
  */
 function generateContinuousWaveFronts(centerLat: number, centerLng: number, baseSpeedKmH: number, baseDirDeg: number): ContinuousWaveFront[] {
   const fronts: ContinuousWaveFront[] = [];
-  const latStep = 0.16;
-  const lngStep = 0.24;
+  const halfRows = Math.floor(FRONT_ROWS / 2);
+  const halfCols = Math.floor(FRONT_COLS / 2);
 
-  const speedOffsets = [-12, -10, -8, -6, -4, -2, 0, 2, 5, 8, 11, 14, 17, 20];
+  for (let i = 0; i < FRONT_ROWS; i++) {
+    const f = i - halfRows;
+    const t = FRONT_ROWS === 1 ? 0.5 : i / (FRONT_ROWS - 1);
+    const speedOffset = SPEED_OFFSET_MIN + t * (SPEED_OFFSET_MAX - SPEED_OFFSET_MIN);
 
-  let frontCounter = 0;
-  for (let f = -7; f <= 6; f++) {
-    const waveSpeed = Math.max(10, Math.round(baseSpeedKmH + speedOffsets[frontCounter]!));
+    const waveSpeed = Math.max(10, Math.round(baseSpeedKmH + speedOffset));
     const color = getWindSpeedBlueGradient(waveSpeed);
     const localDir = (baseDirDeg + f * 2.5 + 360) % 360;
     const flowAngleDeg = (localDir + 180) % 360; // Direction wind is blowing TOWARD
 
     const latLngs: [number, number][] = [];
-    const baseLat = centerLat + f * latStep;
+    const baseLat = centerLat + f * FRONT_LAT_STEP;
 
-    // Create 15 control points along each wave front curve spanning wide longitude
-    for (let col = -7; col <= 7; col++) {
-      const lng = centerLng + col * lngStep;
+    for (let j = 0; j < FRONT_COLS; j++) {
+      const col = j - halfCols;
+      const lng = centerLng + col * FRONT_LNG_STEP;
       const waveOffset = Math.sin(col * 0.6 + f * 1.1) * 0.055 + Math.cos(col * 0.4) * 0.03;
-      const lat = baseLat + waveOffset;
-      latLngs.push([lat, lng]);
+      latLngs.push([baseLat + waveOffset, lng]);
     }
 
     fronts.push({
-      id: `front-${frontCounter++}`,
+      id: `front-${i}`,
       speedKmH: waveSpeed,
       directionDeg: localDir,
       flowAngleDeg,

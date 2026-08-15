@@ -40,6 +40,7 @@ export default function MapView({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const radiusLayerRef = useRef<L.LayerGroup | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const onSelectRef = useRef(onSelectIncident);
   useEffect(() => {
@@ -77,6 +78,7 @@ export default function MapView({
 
     L.control.zoom({ position: "topright" }).addTo(map);
 
+    radiusLayerRef.current = L.layerGroup().addTo(map);
     windLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
 
@@ -89,6 +91,7 @@ export default function MapView({
       observer.disconnect();
       map.remove();
       mapRef.current = null;
+      radiusLayerRef.current = null;
       windLayerRef.current = null;
       markerLayerRef.current = null;
     };
@@ -123,7 +126,7 @@ export default function MapView({
       polyline.addTo(layer);
 
       // 2. Place high-visibility directional triangles aligned perfectly along the front curve
-      const step = 3;
+      const step = 5;
       for (let i = 2; i < front.latLngs.length - 1; i += step) {
         const p1 = front.latLngs[i - 1]!;
         const p2 = front.latLngs[i]!;
@@ -194,6 +197,35 @@ export default function MapView({
       L.marker(p2, { icon: badgeIcon, interactive: false, zIndexOffset: 500 }).addTo(layer);
     }
   }, [showWind, windData, zoomLevel]);
+
+  // Severity radius: a ring around each incident whose size scales with severity, in
+  // the same hue as its marker. Radius is in metres and proportional to the score, so a
+  // score of 20 covers ~12km and a score of 100 covers ~60km. Non-interactive so it
+  // never intercepts a click meant for the marker underneath.
+  useEffect(() => {
+    const layer = radiusLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    for (const inc of incidents) {
+      const colors = SEVERITY_COLORS[inc.severity] || SEVERITY_COLORS.Moderate;
+      const isSelected = inc.id === selectedId;
+      // Floor plus linear term: the floor keeps a low-severity fire legible at
+      // province scale, the linear term makes the difference between a 20 and a 100
+      // obvious at a glance.
+      const radiusMeters = 10_000 + inc.score * 700;
+
+      L.circle([inc.location.lat, inc.location.lng], {
+        radius: radiusMeters,
+        color: colors.bg,
+        weight: isSelected ? 1.8 : 1.2,
+        opacity: isSelected ? 0.85 : 0.6,
+        fillColor: colors.bg,
+        fillOpacity: isSelected ? 0.22 : 0.15,
+        interactive: false,
+      }).addTo(layer);
+    }
+  }, [incidents, selectedId]);
 
   // Render incident markers directly as dots on the map (Nametags fade out when zoomed out < 10.5)
   useEffect(() => {
@@ -271,7 +303,19 @@ export default function MapView({
     }
   }, [incidents, selectedId, zoomLevel]);
 
-  // Center map on selected incident if clicked
+  /**
+   * Frame the map: fly to a selected incident, otherwise fit every incident.
+   *
+   * The fit is debounced. Incidents arrive one at a time as each call is analysed, and
+   * Leaflet silently DROPS a fitBounds issued while a previous zoom animation is still
+   * running — so the first call (a single incident, pinned to maxZoom) used to win and
+   * every later one was discarded, leaving the map zoomed into whichever fire happened
+   * to resolve first while the rest sat off-screen. Cancelling the pending fit on each
+   * change means only the final, complete set is ever framed.
+   *
+   * maxZoom is 9 rather than 12 so a lone incident still shows its surroundings instead
+   * of filling the view with one hillside.
+   */
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -279,12 +323,19 @@ export default function MapView({
     if (selectedId) {
       const inc = incidents.find((i) => i.id === selectedId);
       if (inc) {
-        map.flyTo([inc.location.lat, inc.location.lng], 12, { animate: true, duration: 0.8 });
+        map.flyTo([inc.location.lat, inc.location.lng], 10, { animate: true, duration: 0.8 });
       }
-    } else if (incidents.length > 0) {
-      const points: L.LatLngExpression[] = incidents.map((i) => [i.location.lat, i.location.lng]);
-      map.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 12, animate: true });
+      return;
     }
+
+    if (incidents.length === 0) return;
+
+    const timer = setTimeout(() => {
+      const points: L.LatLngExpression[] = incidents.map((i) => [i.location.lat, i.location.lng]);
+      map.fitBounds(L.latLngBounds(points), { padding: [90, 90], maxZoom: 9, animate: true });
+    }, 350);
+
+    return () => clearTimeout(timer);
   }, [selectedId, incidents]);
 
   return (
