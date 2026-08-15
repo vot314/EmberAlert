@@ -34,11 +34,8 @@ export function degreesToCardinal(deg: number): string {
 }
 
 /**
- * Maps wind speed to a blue gradient, mid-blue through to near-black navy.
- *
- * The ramp used to start at a very light blue (#93c5fd), which was legible over dark
- * satellite imagery but disappears against the light basemap. Every stop is now dark
- * enough to hold contrast on white.
+ * Maps wind speed (10-40 km/h) to a gradient from light blue (#93c5fd) to dark navy
+ * (#172554). Tuned to read over dark satellite imagery.
  */
 export function getWindSpeedBlueGradient(speedKmH: number): string {
   const minSpeed = 10;
@@ -47,18 +44,18 @@ export function getWindSpeedBlueGradient(speedKmH: number): string {
 
   // Color Stops: Light Sky Blue -> Vibrant Royal Blue -> Deep Dark Navy Blue
   if (ratio < 0.33) {
-    // #5b93e0 -> #2f6fd0
+    // #93c5fd -> #3b82f6
     const t = ratio / 0.33;
-    const r = Math.round(91 + (47 - 91) * t);
-    const g = Math.round(147 + (111 - 147) * t);
-    const b = Math.round(224 + (208 - 224) * t);
+    const r = Math.round(147 + (59 - 147) * t);
+    const g = Math.round(197 + (130 - 197) * t);
+    const b = Math.round(253 + (246 - 253) * t);
     return `rgb(${r}, ${g}, ${b})`;
   } else if (ratio < 0.66) {
-    // #2f6fd0 -> #1d4ed8
+    // #3b82f6 -> #1d4ed8
     const t = (ratio - 0.33) / 0.33;
-    const r = Math.round(47 + (29 - 47) * t);
-    const g = Math.round(111 + (78 - 111) * t);
-    const b = Math.round(208 + (216 - 208) * t);
+    const r = Math.round(59 + (29 - 59) * t);
+    const g = Math.round(130 + (78 - 130) * t);
+    const b = Math.round(246 + (216 - 246) * t);
     return `rgb(${r}, ${g}, ${b})`;
   } else {
     // #1d4ed8 -> #172554

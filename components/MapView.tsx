@@ -16,13 +16,12 @@ type Props = {
   onSelectIncident?: (id: string) => void;
 };
 
-/**
- * Carto Positron: a light, low-chroma basemap with labels baked in, so no separate
- * label overlay is needed. Satellite imagery was dropped for the light interface — a
- * photographic basemap competes with the data, and the incidents and wind vectors
- * should be the only saturated things on screen.
- */
-const CARTO_LIGHT = "https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png";
+// Esri's tile scheme is {z}/{y}/{x} — y before x. Carto below uses standard {z}/{x}/{y}.
+const ESRI_IMAGERY =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+// Labels-only overlay: place names with no filled polygons, so the imagery stays clean.
+const CARTO_LABELS =
+  "https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}.png";
 
 const SEVERITY_COLORS: Record<IncidentSeverity, { bg: string; border: string; glow: string }> = {
   Critical: { bg: "#aa0000", border: "#6b0000", glow: "rgba(170, 0, 0, 0.35)" },
@@ -68,9 +67,14 @@ export default function MapView({
     });
     mapRef.current = map;
 
-    L.tileLayer(CARTO_LIGHT, {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors, &copy; CARTO",
+    L.tileLayer(ESRI_IMAGERY, {
+      maxZoom: 18,
+      attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
+    }).addTo(map);
+    L.tileLayer(CARTO_LABELS, {
+      maxZoom: 18,
+      className: "sf-labels",
+      attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
     }).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
@@ -145,8 +149,8 @@ export default function MapView({
               transform: rotate(${angleDeg.toFixed(1)}deg);
               pointer-events: none;
             ">
-              <svg width="${triangleSize}" height="${triangleSize}" viewBox="0 0 12 12" fill="none" style="filter: drop-shadow(0px 1px 1.5px rgba(255,255,255,0.9));">
-                <polygon points="6,1 11,11 1,11" fill="${front.color}" stroke="#ffffff" stroke-width="0.9" />
+              <svg width="${triangleSize}" height="${triangleSize}" viewBox="0 0 12 12" fill="none" style="filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.9));">
+                <polygon points="6,1 11,11 1,11" fill="${front.color}" stroke="#ffffff" stroke-width="1.2" />
               </svg>
             </div>
           `,
@@ -179,7 +183,7 @@ export default function MapView({
             font-size: ${Math.max(9, Math.min(11, zoomLevel))}px;
             font-weight: 700;
             letter-spacing: 0.05em;
-            text-shadow: 0 0 3px #ffffff, 0 0 6px #ffffff, 0 1px 2px rgba(255,255,255,0.95);
+            text-shadow: 0 1px 3px #000000, 0 0 6px #000000, 0 0 10px #000000;
             white-space: nowrap;
             pointer-events: none;
             user-select: none;
@@ -216,10 +220,10 @@ export default function MapView({
       L.circle([inc.location.lat, inc.location.lng], {
         radius: radiusMeters,
         color: colors.bg,
-        weight: isSelected ? 1.8 : 1.2,
-        opacity: isSelected ? 0.85 : 0.6,
+        weight: isSelected ? 2.2 : 1.6,
+        opacity: isSelected ? 1 : 0.85,
         fillColor: colors.bg,
-        fillOpacity: isSelected ? 0.22 : 0.15,
+        fillOpacity: isSelected ? 0.3 : 0.22,
         interactive: false,
       }).addTo(layer);
     }
@@ -246,7 +250,7 @@ export default function MapView({
             height: ${isSelected ? "28px" : "20px"};
             border-radius: 50%;
             background-color: ${colors.bg};
-            border: 2px solid ${isSelected ? "#111111" : colors.border};
+            border: 2px solid ${isSelected ? "#ffffff" : colors.border};
             box-shadow: 0 0 14px ${colors.glow};
             display: flex;
             align-items: center;
@@ -264,14 +268,14 @@ export default function MapView({
             left: 50%;
             transform: translateX(-50%);
             white-space: nowrap;
-            background: #ffffff;
-            color: #111111;
+            background: rgba(15, 23, 42, 0.95);
+            color: #f8fafc;
             font-size: 11px;
             font-weight: 600;
             padding: 2px 7px;
             border-radius: 4px;
-            border: 1px solid ${isSelected ? colors.bg : "#c9c9c9"};
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18);
+            border: 1px solid ${isSelected ? "#ffffff" : "#334155"};
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
             pointer-events: none;
             opacity: ${nametagOpacity};
             transition: opacity 0.25s ease-in-out;
