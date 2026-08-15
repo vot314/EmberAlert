@@ -56,8 +56,14 @@ npm run demo          # DEMO_MODE=replay — fixtures only, never calls the netw
 npm run gen:audio     # re-render the call WAVs (macOS `say`)
 ```
 
-`node scripts/prefetch-tiles.mjs` refreshes the offline basemap in `public/tiles/`
-(committed, ~11 MB). `NEXT_PUBLIC_OFFLINE=1` drops the live tile layer so you can
+`node scripts/prefetch-tiles.mjs` refreshes the offline basemap: satellite imagery in
+`public/tiles/` and place labels in `public/tiles-labels/` (committed, ~18 MB total,
+wide coverage at low zoom and scenario-area coverage at high zoom).
+
+Place names across BC come from a labels-only tile overlay, not a hand-authored list —
+Leaflet renders whatever tiles it is given, and Esri World Imagery carries no names at
+all. The custom marker layer carries only the specific features callers cite, and
+highlights the ones actually named. `NEXT_PUBLIC_OFFLINE=1` drops the live tile layer so you can
 rehearse the offline demo without pulling the network down.
 
 ## Scenario

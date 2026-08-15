@@ -14,14 +14,39 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = join(root, "public", "tiles");
+const LAYERS = [
+  {
+    name: "imagery",
+    dir: join(root, "public", "tiles"),
+    ext: "jpg",
+    url: (z, x, y) =>
+      `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+  },
+  {
+    // Labels-only overlay: place names, no filled polygons. Carto uses standard
+    // XYZ ordering, unlike the Esri imagery above which is {z}/{y}/{x}.
+    name: "labels",
+    dir: join(root, "public", "tiles-labels"),
+    ext: "png",
+    url: (z, x, y) => `https://basemaps.cartocdn.com/rastertiles/dark_only_labels/${z}/${x}/${y}.png`,
+  },
+];
+const outDir = LAYERS[0].dir;
 const manifest = JSON.parse(readFileSync(join(root, "data/calls.json"), "utf8"));
 
-// Bounding box covering every caller plus generous margin around the fix.
-// Wide enough to cover the fitBounds view including padding at every stage of the
-// demo, not just the callers themselves — an uncovered edge shows as grey offline.
-const BBOX = { north: 50.12, south: 49.55, west: -120.15, east: -119.10 };
-const ZOOMS = [9, 10, 11, 12, 13];
+/**
+ * Two tiers, because tile count grows fourfold per zoom level.
+ *
+ * Low zooms cover a wide slice of the southern interior for a few dozen tiles, so
+ * the map still has imagery and place names if anyone pans or zooms out during the
+ * demo — an uncovered edge renders as the label layer floating over bare background,
+ * which looks broken. High zooms cover only the scenario area, where the detail is
+ * actually needed.
+ */
+const TIERS = [
+  { zooms: [7, 8, 9, 10], bbox: { north: 51.2, south: 48.8, west: -121.6, east: -117.8 } },
+  { zooms: [11, 12, 13], bbox: { north: 50.12, south: 49.55, west: -120.15, east: -119.1 } },
+];
 const CONCURRENCY = 8;
 
 const lon2x = (lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
@@ -34,35 +59,34 @@ const lat2y = (lat, z) =>
   );
 
 const jobs = [];
-for (const z of ZOOMS) {
-  const x0 = lon2x(BBOX.west, z);
-  const x1 = lon2x(BBOX.east, z);
-  const y0 = lat2y(BBOX.north, z);
-  const y1 = lat2y(BBOX.south, z);
-  for (let x = x0; x <= x1; x++) {
-    for (let y = y0; y <= y1; y++) {
-      jobs.push({ z, x, y });
+for (const tier of TIERS) {
+  for (const z of tier.zooms) {
+    const x0 = lon2x(tier.bbox.west, z);
+    const x1 = lon2x(tier.bbox.east, z);
+    const y0 = lat2y(tier.bbox.north, z);
+    const y1 = lat2y(tier.bbox.south, z);
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) jobs.push({ z, x, y });
     }
   }
 }
 
-console.log(`${jobs.length} tiles across zoom ${ZOOMS[0]}-${ZOOMS.at(-1)}`);
+console.log(`${jobs.length} tiles per layer across ${TIERS.length} zoom tiers`);
 
 let done = 0;
 let failed = 0;
 let skipped = 0;
 
-async function fetchTile({ z, x, y }) {
-  const dir = join(outDir, String(z), String(x));
-  const file = join(dir, `${y}.jpg`);
+async function fetchTile(layer, { z, x, y }) {
+  const dir = join(layer.dir, String(z), String(x));
+  const file = join(dir, `${y}.${layer.ext}`);
   if (existsSync(file)) {
     skipped++;
     return;
   }
-  // Esri serves {z}/{y}/{x} — y before x.
-  const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
   try {
-    const res = await fetch(url);
+    // Esri serves {z}/{y}/{x} — y before x.
+    const res = await fetch(layer.url(z, x, y));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, Buffer.from(await res.arrayBuffer()));
@@ -72,17 +96,20 @@ async function fetchTile({ z, x, y }) {
   }
 }
 
-const queue = [...jobs];
-await Promise.all(
-  Array.from({ length: CONCURRENCY }, async () => {
-    while (queue.length) await fetchTile(queue.shift());
-  }),
-);
+for (const layer of LAYERS) {
+  const queue = [...jobs];
+  await Promise.all(
+    Array.from({ length: CONCURRENCY }, async () => {
+      while (queue.length) await fetchTile(layer, queue.shift());
+    }),
+  );
+  console.log(`  ${layer.name}: done`);
+}
 
 mkdirSync(outDir, { recursive: true });
 writeFileSync(
   join(outDir, "manifest.json"),
-  JSON.stringify({ bbox: BBOX, zooms: ZOOMS, tiles: done + skipped, generatedAt: new Date().toISOString() }, null, 2),
+  JSON.stringify({ tiers: TIERS, tiles: done + skipped, generatedAt: new Date().toISOString() }, null, 2),
 );
 
 console.log(`downloaded ${done}, already present ${skipped}, failed ${failed}`);

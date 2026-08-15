@@ -36,8 +36,6 @@ export type MapLandmark = {
   /** True when a caller actually named this place — highlighted so the operator can
    *  see at a glance which landmark produced a bearing. */
   referenced: boolean;
-  /** Orientation-only anchors (towns, the lake) stay visible when zoomed out. */
-  major: boolean;
 };
 
 export type MapWedge = {
@@ -62,6 +60,25 @@ type Props = {
 // plausible at a glance but is scrambled.
 const ESRI_IMAGERY =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+
+/**
+ * Transparent labels-only overlay: city, town, lake and river names province-wide.
+ *
+ * Leaflet does not supply place labels — it renders whatever tiles it is handed, and
+ * World Imagery is pure satellite with no names on it at all. So labelling BC is a
+ * tile layer, not a hand-authored gazetteer.
+ *
+ * Carto's "only_labels" variant rather than Esri's World_Boundaries_and_Places:
+ * the Esri reference layer paints filled administrative polygons at low zoom, not
+ * just text, which washed out the imagery wherever a coarse tile was in view. This
+ * one carries text and nothing else, and its dark variant is drawn for exactly this
+ * situation — light labels over a dark base.
+ *
+ * NOTE: Carto uses standard XYZ ({z}/{x}/{y}). Esri's imagery above uses {z}/{y}/{x}.
+ * The two are not interchangeable.
+ */
+const CARTO_LABELS =
+  "https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}.png";
 
 const WEDGE_STYLE: Record<MapWedge["status"], L.PathOptions> = {
   consistent: {
@@ -119,25 +136,44 @@ export default function MapView({
     });
     mapRef.current = map;
 
-    // Live imagery sits underneath as the general-purpose basemap. Set
-    // NEXT_PUBLIC_OFFLINE=1 to omit it entirely and rehearse the offline demo
-    // without actually pulling the network down.
+    // Layer order matters and is not obvious.
+    //
+    //   live imagery -> live labels -> local imagery -> local labels
+    //
+    // Inside the prefetched box the opaque local imagery hides BOTH live layers, so
+    // only the local labels draw. Outside it the local tiles 404 to a transparent
+    // pixel and the live pair shows through. Every area therefore gets exactly one
+    // label pass — stacking two semi-transparent label layers inside the box left a
+    // visible rectangle where the prefetched region began.
+    //
+    // NEXT_PUBLIC_OFFLINE=1 omits the live layers entirely to rehearse the offline
+    // demo without pulling the network down.
+    const BLANK_TILE =
+      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
     if (process.env.NEXT_PUBLIC_OFFLINE !== "1") {
       L.tileLayer(ESRI_IMAGERY, {
         maxZoom: 18,
         attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
       }).addTo(map);
+      L.tileLayer(CARTO_LABELS, {
+        maxZoom: 18,
+        className: "sf-labels",
+        attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
+      }).addTo(map);
     }
 
-    // Prefetched tiles for the scenario area sit on top (scripts/prefetch-tiles.mjs).
-    // Offline, the layer below fails and these carry the demo; online, tiles outside
-    // the prefetched box simply 404 here and the live layer shows through. No
-    // branching, and the demo never depends on the venue network.
     L.tileLayer("/tiles/{z}/{x}/{y}.jpg", {
       maxZoom: 13,
       maxNativeZoom: 13,
-      errorTileUrl:
-        "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      errorTileUrl: BLANK_TILE,
+    }).addTo(map);
+
+    L.tileLayer("/tiles-labels/{z}/{x}/{y}.png", {
+      maxZoom: 13,
+      maxNativeZoom: 13,
+      className: "sf-labels",
+      errorTileUrl: BLANK_TILE,
     }).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
@@ -169,7 +205,9 @@ export default function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Landmarks. Minor ones drop out when zoomed out so the map stays readable.
+  // Landmarks. Place names (cities, lakes) come from the reference tile layer; this
+  // layer carries only the specific features callers cite, and highlights the ones
+  // actually named — which the basemap cannot know about.
   useEffect(() => {
     const layer = landmarkLayerRef.current;
     if (!layer) return;
@@ -178,8 +216,8 @@ export default function MapView({
     for (const lm of landmarks) {
       // A referenced landmark is the one that produced a bearing, so it must never
       // be decluttered away — that is the label the operator most needs to see.
-      if (!lm.major && !lm.referenced && zoomLevel < 10) continue;
-      const state = lm.referenced ? "referenced" : lm.major ? "major" : "minor";
+      if (!lm.referenced && zoomLevel < 10) continue;
+      const state = lm.referenced ? "referenced" : "minor";
       const icon = L.divIcon({
         className: "sf-icon",
         html: `<div class="sf-landmark" data-state="${state}"><span class="sf-lm-dot"></span><span class="sf-lm-label">${lm.label}</span></div>`,

@@ -70,14 +70,17 @@ export default function Page() {
         if (lm) referenced.add(lm.id);
       }
     }
-    return landmarksIn(REGION).map((l) => ({
-      id: l.id,
-      label: l.label,
-      lat: l.lat,
-      lng: l.lng,
-      referenced: referenced.has(l.id),
-      major: Boolean(l.labelOnly),
-    }));
+    // labelOnly places (towns, the lake) are drawn by the reference tile layer, so
+    // emitting them here too would double-label the map.
+    return landmarksIn(REGION)
+      .filter((l) => !l.labelOnly)
+      .map((l) => ({
+        id: l.id,
+        label: l.label,
+        lat: l.lat,
+        lng: l.lng,
+        referenced: referenced.has(l.id),
+      }));
   }, [resolved]);
 
   const rows: CallRow[] = CALLS.map((call) => {

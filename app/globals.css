@@ -154,6 +154,14 @@ body {
   box-shadow: 0 0 0 2px rgb(2 6 23 / 0.85);
 }
 
+/* Do NOT add mix-blend-mode here: each tile layer container becomes its own stacking
+   context, and the live and prefetched label layers then composited differently,
+   drawing a visible rectangle exactly where the prefetched region began. Plain
+   opacity composites identically in both. */
+.sf-labels {
+  opacity: 0.9;
+}
+
 /* ---- Leaflet chrome ----------------------------------------------------- */
 
 /* Leaflet paints its container light grey by default, which flashes white before
