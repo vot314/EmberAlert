@@ -28,79 +28,90 @@ const data = JSON.parse(readFileSync(join(root, manifestPath), "utf8"));
 const truth = data.scenario.groundTruth as { lat: number; lng: number };
 
 async function main() {
-const { resolveExtraction, DEFAULT_MODEL } = await import("../lib/cache");
+  const { resolveExtraction, DEFAULT_MODEL } = await import("../lib/cache");
 
-console.log(`\nmodel: ${DEFAULT_MODEL}`);
-console.log(`key present: ${process.env.GEMINI_API_KEY ? "yes" : "NO"}\n`);
+  console.log(`\nmodel: ${DEFAULT_MODEL}`);
+  console.log(`key present: ${process.env.GEMINI_API_KEY ? "yes" : "NO"}\n`);
 
-const wedges: Wedge[] = [];
-const unusable: string[] = [];
-let liveCount = 0;
+  const wedges: Wedge[] = [];
+  const unusable: string[] = [];
+  let liveCount = 0;
 
-for (const call of data.calls) {
-  const fixture: Extraction = JSON.parse(
-    readFileSync(join(root, `fixtures/extractions/${call.id}.json`), "utf8"),
-  );
+  for (const call of data.calls) {
+    const fixturePath = join(root, `fixtures/extractions/${call.id}.json`);
+    const fixtureExists = existsSync(fixturePath);
+    const fixture: Extraction | null = fixtureExists
+      ? JSON.parse(readFileSync(fixturePath, "utf8"))
+      : null;
 
-  const audioPath = join(root, "public", call.audio.replace(/^\//, ""));
-  let live: Extraction;
-  let source: string;
-  let latency: number | null;
+    const audioPath = join(root, "public", call.audio.replace(/^\//, ""));
+    let live: Extraction;
+    let source: string;
+    let latency: number | null;
 
-  try {
-    const r = await resolveExtraction(call.id, audioPath);
-    live = r.extraction;
-    source = r.source;
-    latency = r.latencyMs;
-    if (r.source === "live") liveCount++;
-  } catch (err) {
-    console.log(`${call.id}  FAILED: ${err instanceof Error ? err.message : err}\n`);
-    continue;
+    try {
+      const r = await resolveExtraction(call.id, audioPath);
+      live = r.extraction;
+      source = r.source;
+      latency = r.latencyMs;
+      if (r.source === "live") liveCount++;
+    } catch (err) {
+      console.log(`${call.id}  FAILED: ${err instanceof Error ? err.message : err}\n`);
+      continue;
+    }
+
+    console.log(`${call.id}  ${call.callerLabel}`);
+    console.log(`  source=${source}${latency !== null ? ` latency=${latency}ms` : ""}`);
+
+    if (fixture) {
+      const cmp = (label: string, a: unknown, b: unknown) => {
+        const same = JSON.stringify(a) === JSON.stringify(b);
+        console.log(
+          `  ${same ? "  =" : " !="} ${label.padEnd(12)} fixture=${JSON.stringify(a)}  live=${JSON.stringify(b)}`,
+        );
+      };
+
+      cmp("compass", fixture.direction.compass, live.direction.compass);
+      cmp("distance",
+        [fixture.distance_hint.value, fixture.distance_hint.unit, fixture.distance_hint.vagueness],
+        [live.distance_hint.value, live.distance_hint.unit, live.distance_hint.vagueness]);
+      cmp("landmarks",
+        fixture.landmarks.map((l) => `${l.relation}:${l.name}`),
+        live.landmarks.map((l) => `${l.relation}:${l.name}`));
+      cmp("volume", fixture.smoke.volume, live.smoke.volume);
+      console.log(
+        `     specificity  fixture=${fixture.description_specificity}  live=${live.description_specificity}`,
+      );
+    } else {
+      console.log(`  compass:     ${live.direction.compass}`);
+      console.log(`  distance:    ${live.distance_hint.value} ${live.distance_hint.unit} (${live.distance_hint.vagueness})`);
+      console.log(`  landmarks:   ${JSON.stringify(live.landmarks)}`);
+      console.log(`  volume:      ${live.smoke.volume}`);
+      console.log(`  specificity: ${live.description_specificity}`);
+    }
+
+    if (live.notes) console.log(`     notes: ${live.notes}`);
+    console.log("");
+
+    const w = buildWedge(call.id, call.caller, live, data.scenario.regionKey);
+    if (w) wedges.push(w);
+    else unusable.push(call.id);
   }
 
-  console.log(`${call.id}  ${call.callerLabel}`);
-  console.log(`  source=${source}${latency !== null ? ` latency=${latency}ms` : ""}`);
+  const fix = fuseWedges(wedges, unusable, truth);
 
-  const cmp = (label: string, a: unknown, b: unknown) => {
-    const same = JSON.stringify(a) === JSON.stringify(b);
-    console.log(
-      `  ${same ? "  =" : " !="} ${label.padEnd(12)} fixture=${JSON.stringify(a)}  live=${JSON.stringify(b)}`,
-    );
-  };
-
-  cmp("compass", fixture.direction.compass, live.direction.compass);
-  cmp("distance",
-    [fixture.distance_hint.value, fixture.distance_hint.unit, fixture.distance_hint.vagueness],
-    [live.distance_hint.value, live.distance_hint.unit, live.distance_hint.vagueness]);
-  cmp("landmarks",
-    fixture.landmarks.map((l) => `${l.relation}:${l.name}`),
-    live.landmarks.map((l) => `${l.relation}:${l.name}`));
-  cmp("volume", fixture.smoke.volume, live.smoke.volume);
+  console.log("=".repeat(78));
+  console.log(`live extractions used: ${liveCount}/${data.calls.length}`);
+  console.log("\nfix from LIVE extractions");
+  console.log(`  area        : ${fix.areaKm2.toFixed(2)} km²`);
+  console.log(`  consistent  : ${fix.consistentCallIds.join(", ") || "(none)"}`);
+  console.log(`  flagged     : ${fix.inconsistentCallIds.join(", ") || "(none)"}`);
+  console.log(`  unusable    : ${fix.unusableCallIds.join(", ") || "(none)"}`);
+  console.log(`  confidence  : ${fix.confidence}`);
   console.log(
-    `     specificity  fixture=${fixture.description_specificity}  live=${live.description_specificity}`,
+    `  error       : ${fix.errorMeters !== null ? `${Math.round(fix.errorMeters)} m` : "n/a"}`,
   );
-  if (live.notes) console.log(`     notes: ${live.notes}`);
-  console.log("");
-
-  const w = buildWedge(call.id, call.caller, live, data.scenario.regionKey);
-  if (w) wedges.push(w);
-  else unusable.push(call.id);
-}
-
-const fix = fuseWedges(wedges, unusable, truth);
-
-console.log("=".repeat(78));
-console.log(`live extractions used: ${liveCount}/${data.calls.length}`);
-console.log("\nfix from LIVE extractions");
-console.log(`  area        : ${fix.areaKm2.toFixed(2)} km²`);
-console.log(`  consistent  : ${fix.consistentCallIds.join(", ") || "(none)"}`);
-console.log(`  flagged     : ${fix.inconsistentCallIds.join(", ") || "(none)"}`);
-console.log(`  unusable    : ${fix.unusableCallIds.join(", ") || "(none)"}`);
-console.log(`  confidence  : ${fix.confidence}`);
-console.log(
-  `  error       : ${fix.errorMeters !== null ? `${Math.round(fix.errorMeters)} m` : "n/a"}`,
-);
-console.log("\nbaseline from authored fixtures: 8.97 km², 123 m, HIGH, call-05 flagged\n");
+  console.log("\nbaseline comparison complete\n");
 }
 
 main().catch((err) => {

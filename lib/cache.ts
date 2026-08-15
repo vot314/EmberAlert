@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, extname } from "node:path";
 import { GoogleGenAI } from "@google/genai";
 import {
   EXTRACTION_PROMPT,
@@ -28,7 +28,10 @@ export type ResolvedExtraction = {
   latencyMs: number | null;
 };
 
-const CACHE_DIR = join(process.cwd(), ".cache");
+// On Vercel the deployment filesystem is read-only except for /tmp, so writes to a
+// project-relative .cache/ would silently no-op. Pointing at /tmp lets a warm lambda
+// reuse a result within its lifetime, which trims cost and latency on repeat calls.
+const CACHE_DIR = process.env.VERCEL ? "/tmp/smokefix-cache" : join(process.cwd(), ".cache");
 const FIXTURE_DIR = join(process.cwd(), "fixtures", "extractions");
 
 /** Verified against the docs at build time; override with GEMINI_MODEL if it moves. */
@@ -79,8 +82,17 @@ function readFixture(callId: string): Extraction | null {
   }
 }
 
+function getMimeType(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".m4a") return "audio/m4a";
+  return "audio/wav";
+}
+
 async function callGemini(
   audioBytes: Buffer,
+  mimeType: string,
 ): Promise<{ extraction: Extraction; model: string; latencyMs: number }> {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("no API key");
@@ -95,7 +107,7 @@ async function callGemini(
         role: "user",
         parts: [
           { text: EXTRACTION_PROMPT },
-          { inlineData: { mimeType: "audio/wav", data: audioBytes.toString("base64") } },
+          { inlineData: { mimeType, data: audioBytes.toString("base64") } },
         ],
       },
     ],
@@ -116,11 +128,16 @@ async function callGemini(
   };
 }
 
-export async function resolveExtraction(
+/**
+ * Core resolver, working from audio bytes rather than a path. The serverless route
+ * uses this directly (it fetches audio over HTTP, since public/ files are not on the
+ * function filesystem); local scripts use the path wrapper below.
+ */
+export async function resolveExtractionFromBytes(
   callId: string,
-  audioAbsPath: string,
+  audioBytes: Buffer,
+  mimeType: string,
 ): Promise<ResolvedExtraction> {
-  const audioBytes = readFileSync(audioAbsPath);
   const key = cacheKey(audioBytes);
 
   const cached = readCache(key);
@@ -133,14 +150,28 @@ export async function resolveExtraction(
   }
 
   try {
-    const live = await callGemini(audioBytes);
+    const live = await callGemini(audioBytes, mimeType);
     writeCache(key, live.extraction, live.model);
     return { extraction: live.extraction, source: "live", model: live.model, latencyMs: live.latencyMs };
   } catch {
-    // No key, no network, or a bad response: fall through to the committed fixture
-    // rather than failing in front of an audience.
+    // No key, no network, or a bad response: fall through to a committed fixture if one
+    // exists, rather than failing in front of an audience.
     const fixture = readFixture(callId);
-    if (!fixture) throw new Error(`no cache, no live result and no fixture for ${callId}`);
+    if (!fixture) {
+      throw new Error(
+        `extraction failed for ${callId}: no cached result, no fixture, and the live ` +
+          `call did not succeed (is GEMINI_API_KEY set?)`,
+      );
+    }
     return { extraction: fixture, source: "fixture", model: null, latencyMs: null };
   }
+}
+
+/** Path wrapper for local scripts (verify-geometry, compare-live). */
+export async function resolveExtraction(
+  callId: string,
+  audioAbsPath: string,
+): Promise<ResolvedExtraction> {
+  const audioBytes = readFileSync(audioAbsPath);
+  return resolveExtractionFromBytes(callId, audioBytes, getMimeType(audioAbsPath));
 }

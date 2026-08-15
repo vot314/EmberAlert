@@ -1,9 +1,0 @@
-{
-  "landmarks": [],
-  "direction": { "compass": "NNW", "relative": "north northwest of here" },
-  "distance_hint": { "value": 8, "unit": "km", "vagueness": "rough" },
-  "smoke": { "color": "grey", "volume": "column", "drift_direction": "" },
-  "description_specificity": 0.7,
-  "secondhand": false,
-  "notes": "Hedged but usable bearing and range; caller reports rapid growth over the preceding ten minutes."
-}
