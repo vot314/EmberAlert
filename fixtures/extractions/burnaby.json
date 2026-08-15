@@ -1,0 +1,21 @@
+{
+  "transcript": "Burnaby is on fire, please help!",
+  "location": {
+    "named_place": "Burnaby",
+    "latitude": 49.2488,
+    "longitude": -122.9805,
+    "detail": ""
+  },
+  "fire": {
+    "size": "unknown",
+    "spread": "unknown",
+    "out_of_control": true
+  },
+  "threat": {
+    "structures": false,
+    "lives": false,
+    "evacuation": false
+  },
+  "severity_score": 35,
+  "severity_reason": "Fire reported in Burnaby with no specific details on size, structure involvement, or casualties."
+}

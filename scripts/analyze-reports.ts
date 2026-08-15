@@ -22,16 +22,16 @@ if (existsSync(envPath)) {
 
 async function main() {
   const { resolveExtraction, DEFAULT_MODEL } = await import("../lib/cache");
-  const manifest = JSON.parse(readFileSync(join(root, "data/reports.json"), "utf8"));
-  const all = [...manifest.reports, ...manifest.heldReports];
+  // Same folder scan the app uses, so dropped-in recordings are analysed too.
+  const { scanReports } = await import("../lib/reports");
+  const all = scanReports().map((s) => ({ id: s.entry.id, label: s.entry.label, path: s.path }));
 
   console.log(`model: ${DEFAULT_MODEL}\n`);
   mkdirSync(join(root, "fixtures/extractions"), { recursive: true });
 
   const analyzed: AnalyzedReport[] = [];
   for (const rec of all) {
-    const audioPath = join(root, "public", rec.audio.replace(/^\//, ""));
-    const r = await resolveExtraction(rec.id, audioPath);
+    const r = await resolveExtraction(rec.id, rec.path);
 
     // Persist as a fixture so the demo has a no-key fallback.
     writeFileSync(
@@ -49,12 +49,9 @@ async function main() {
     console.log(`   "${r.extraction.transcript}"`);
   }
 
-  // Rank the ACTIVE reports only (matches the initial webpage state).
-  const activeIds = new Set(manifest.reports.map((r: { id: string }) => r.id));
-  const active = analyzed.filter((a) => activeIds.has(a.id));
-  const { fires, unlocatable } = rankFires(active);
+  const { fires, unlocatable } = rankFires(analyzed);
 
-  console.log("\nranked fires (active reports)\n" + "-".repeat(60));
+  console.log("\nranked fires\n" + "-".repeat(60));
   for (const f of fires) {
     console.log(
       `#${f.rank}  ${f.place.padEnd(22)} severity ${String(f.severity).padStart(3)}  ` +

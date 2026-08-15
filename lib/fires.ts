@@ -41,6 +41,7 @@ export function severityBand(score: number): SeverityBand {
 /** Known BC places, so the marker sits on the real town rather than the model's guess. */
 const GAZETTEER: { names: string[]; lat: number; lng: number; label: string }[] = [
   { names: ["vancouver"], lat: 49.2827, lng: -123.1207, label: "Vancouver" },
+  { names: ["burnaby"], lat: 49.2488, lng: -122.9805, label: "Burnaby" },
   { names: ["kamloops"], lat: 50.6745, lng: -120.3273, label: "Kamloops" },
   { names: ["whistler", "whistler mountain", "whistler blackcomb"], lat: 50.1163, lng: -122.9574, label: "Whistler" },
   {
@@ -117,8 +118,18 @@ export function analyzeReport(id: string, label: string, report: FireReport): An
   return { id, label, report, coords, place };
 }
 
-/** Two reports describe the same fire if they snap to the same place or sit within ~25 km. */
-const SAME_FIRE_KM = 25;
+/**
+ * Distance fallback for treating two reports as the same fire when their place names
+ * differ. The primary merge signal is the place name itself (both Whistler callers
+ * snap to "Whistler"); the radius only catches the same blaze described from two
+ * vantage points with slightly different model coordinates.
+ *
+ * This was 25 km, which was fine while every fire sat hundreds of km apart — but in a
+ * metro area it swallows neighbouring cities: Burnaby is 10.8 km from Vancouver, so a
+ * new Burnaby fire silently merged into the Vancouver incident and six calls showed as
+ * four fires. 8 km keeps adjacent-city fires distinct.
+ */
+const SAME_FIRE_KM = 8;
 
 /**
  * Group located reports into fires and rank them. Severity is the strongest member
