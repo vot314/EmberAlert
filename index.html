@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proof of Concept Fire Simulation (50x100)</title>
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+
+  <div class="container">
+    <div>
+      <h1>Proof of Concept Fire Simulation</h1>
+      <div class="subtext">50x100 Grid Map | Click map tile to set Fire Origin</div>
+    </div>
+
+    <!-- Basic Controls -->
+    <div class="controls-panel">
+      <div class="control-group">
+        <button id="btn-toggle">Start</button>
+        <button id="btn-step">Step (+1 Tick)</button>
+        <button id="btn-reset">Reset</button>
+      </div>
+
+      <div class="control-group">
+        <label for="wind-select">Base Wind:</label>
+        <select id="wind-select">
+          <option value="0">East (→)</option>
+          <option value="45">Southeast (↘)</option>
+          <option value="90">South (↓)</option>
+          <option value="135">Southwest (↙)</option>
+          <option value="180">West (←)</option>
+          <option value="225">Northwest (↖)</option>
+          <option value="270">North (↑)</option>
+          <option value="315">Northeast (↗)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="chk-dynamic-wind">
+          <input type="checkbox" id="chk-dynamic-wind" checked> Dynamic Gusts
+        </label>
+      </div>
+
+      <div class="control-group">
+        <label for="speed-range">Speed (ms):</label>
+        <input type="range" id="speed-range" min="50" max="1000" step="50" value="250">
+        <span id="speed-val">250ms</span>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <span>Legend:</span>
+      <div class="legend-item">
+        <span class="color-box color-gray-light"></span> Light Gray: Unburned Tile
+      </div>
+      <div class="legend-item">
+        <span class="color-box color-gray-dark"></span> Dark Gray: Burnt Out Ash
+      </div>
+      <div class="legend-item">
+        <span class="color-box color-yellow"></span> Yellow: Head Front
+      </div>
+      <div class="legend-item">
+        <span class="color-box color-orange"></span> Orange: Body / Side
+      </div>
+      <div class="legend-item">
+        <span class="color-box color-red"></span> Red: Heel / Ember
+      </div>
+      <div class="legend-item">
+        <span class="dot-box dot-black">●</span> Dynamic Head (Black Dot)
+      </div>
+      <div class="legend-item">
+        <span class="dot-box dot-black">●</span> Dynamic Heel (Black Dot)
+      </div>
+    </div>
+
+    <!-- Grid Canvas Viewport -->
+    <div class="grid-viewport">
+      <canvas id="fire-canvas" width="1000" height="500"></canvas>
+    </div>
+
+    <!-- Basic Text Statistics -->
+    <div class="stats-panel">
+      <div class="stat-item">Ticks: <span id="stat-ticks" class="stat-val">0</span></div>
+      <div class="stat-item">Current Wind Angle: <span id="stat-wind" class="stat-val">0°</span></div>
+      <div class="stat-item">Total Active Fire: <span id="stat-fire" class="stat-val">0</span></div>
+      <div class="stat-item">Head (Yellow): <span id="stat-head" class="stat-val">0</span></div>
+      <div class="stat-item">Sides (Orange): <span id="stat-side" class="stat-val">0</span></div>
+      <div class="stat-item">Heel (Red): <span id="stat-heel" class="stat-val">0</span></div>
+      <div class="stat-item">No Fire (Gray): <span id="stat-gray" class="stat-val">5000</span></div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
