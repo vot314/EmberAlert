@@ -1,0 +1,21 @@
+{
+  "transcript": "Dude, Whistler's on fire, bro. The whole mountain is burning. I see so much smoke up north here. Oh my gosh. Can someone please come right now?",
+  "location": {
+    "named_place": "Whistler",
+    "latitude": 50.1163,
+    "longitude": -122.9574,
+    "detail": "north side of the mountain"
+  },
+  "fire": {
+    "size": "large",
+    "spread": "unknown",
+    "out_of_control": true
+  },
+  "threat": {
+    "structures": false,
+    "lives": false,
+    "evacuation": false
+  },
+  "severity_score": 60,
+  "severity_reason": "A large, uncontained wildfire is reported burning across Whistler Mountain, though no immediate structural threats or injuries were explicitly confirmed."
+}

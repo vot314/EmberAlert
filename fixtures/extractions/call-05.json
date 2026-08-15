@@ -1,9 +1,0 @@
-{
-  "landmarks": [{ "name": "Kelowna airport", "relation": "near" }],
-  "direction": { "compass": "NE", "relative": "off to the northeast of me, low" },
-  "distance_hint": { "value": 2, "unit": "km", "vagueness": "rough" },
-  "smoke": { "color": "whitish", "volume": "wisp", "drift_direction": "" },
-  "description_specificity": 0.6,
-  "secondhand": false,
-  "notes": "Low white smoke close to the airport; caller suspects a controlled burn. Geometry points away from the other reports."
-}

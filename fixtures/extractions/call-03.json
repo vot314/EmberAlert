@@ -1,9 +1,0 @@
-{
-  "landmarks": [{ "name": "Rose Valley reservoir", "relation": "past" }],
-  "direction": { "compass": "N", "relative": "straight north of me, back in the hills behind it" },
-  "distance_hint": { "value": 0, "unit": "none", "vagueness": "none" },
-  "smoke": { "color": "grey", "volume": "column", "drift_direction": "east" },
-  "description_specificity": 0.5,
-  "secondhand": false,
-  "notes": "Landmark plus a clear beyond-relation, which bounds the near edge of the search area; no distance stated."
-}

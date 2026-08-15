@@ -2,140 +2,85 @@
 
 import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { buildWedge, fuseWedges, type Wedge } from "@/lib/geometry";
-import type { Extraction } from "@/lib/schema";
-import type { ExtractionSource } from "@/lib/cache";
-import { landmarksIn, resolveLandmark, type Region } from "@/lib/landmarks";
-import CallTimeline, { type CallRow, type CallState } from "@/components/CallTimeline";
-import scenarioData from "@/data/calls.json";
+import manifest from "@/data/reports.json";
+import type { FireReport } from "@/lib/schema";
+import { analyzeReport, rankFires, type AnalyzedReport } from "@/lib/fires";
+import { FireQueue, ReportFeed, type ReportRow } from "@/components/PriorityBoard";
 
-// MapLibre touches `window` at import time, so it must never be server-rendered.
-// `ssr: false` is only permitted inside a client component, which is why this
-// page carries "use client".
+// Leaflet touches `window` at import time, so it must never be server-rendered.
+// `ssr: false` is only allowed inside a client component, hence "use client" above.
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
   loading: () => <div className="h-full w-full bg-[#0a0e13]" />,
 });
 
-type Call = {
-  id: string;
-  audio: string;
-  callerLabel: string;
-  caller: { lat: number; lng: number };
-  offsetSeconds: number;
-  script: string;
-};
+type ReportRecord = { id: string; audio: string; label: string; offsetSeconds: number };
 
-const SCENARIO = scenarioData.scenario;
-const CALLS = scenarioData.calls as Call[];
-const GROUND_TRUTH = SCENARIO.groundTruth;
-const REGION = SCENARIO.regionKey as Region;
+const SCENARIO = manifest.scenario;
+const ACTIVE = manifest.reports as ReportRecord[];
+const HELD = manifest.heldReports as ReportRecord[];
 
-type Resolved = { extraction: Extraction; source: ExtractionSource; latencyMs: number | null };
+type Resolved = { extraction: FireReport; source: string; latencyMs: number | null };
 
 export default function Page() {
   const [resolved, setResolved] = useState<Record<string, Resolved>>({});
-  const [phase, setPhase] = useState<Record<string, "playing" | "extracting">>({});
+  const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  const [revealTruth, setRevealTruth] = useState(false);
+  // Silver Star is held back so it can be uploaded mid-demo and re-rank the board.
+  const [uploaded, setUploaded] = useState<string[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // All geometry is recomputed from scratch whenever an extraction lands. It is
-  // cheap, and it means the fix can never drift out of sync with the calls.
-  const { wedges, fix, wedgeById } = useMemo(() => {
-    const ws: Wedge[] = [];
-    const unusable: string[] = [];
-    for (const call of CALLS) {
-      const r = resolved[call.id];
+  const visible = useMemo(
+    () => [...ACTIVE, ...HELD.filter((h) => uploaded.includes(h.id))],
+    [uploaded],
+  );
+
+  // Ranking is recomputed from scratch whenever a report lands: cheap, and the board
+  // can never drift out of sync with the reports behind it.
+  const { fires, unlocatable } = useMemo(() => {
+    const analyzed: AnalyzedReport[] = [];
+    for (const rec of visible) {
+      const r = resolved[rec.id];
       if (!r) continue;
-      const w = buildWedge(call.id, call.caller, r.extraction, REGION);
-      if (w) ws.push(w);
-      else unusable.push(call.id);
+      analyzed.push(analyzeReport(rec.id, rec.label, r.extraction));
     }
-    const f = fuseWedges(ws, unusable, GROUND_TRUTH);
-    return { wedges: ws, fix: f, wedgeById: new Map(ws.map((w) => [w.callId, w])) };
-  }, [resolved]);
+    return rankFires(analyzed);
+  }, [resolved, visible]);
 
-  // Landmarks a caller actually named are highlighted, so the operator can see which
-  // place produced a bearing rather than having to infer it from the wedge.
-  const mapLandmarks = useMemo(() => {
-    const referenced = new Set<string>();
-    for (const call of CALLS) {
-      const r = resolved[call.id];
-      if (!r) continue;
-      for (const l of r.extraction.landmarks) {
-        const lm = resolveLandmark(l.name, REGION);
-        if (lm) referenced.add(lm.id);
-      }
-    }
-    // labelOnly places (towns, the lake) are drawn by the reference tile layer, so
-    // emitting them here too would double-label the map.
-    return landmarksIn(REGION)
-      .filter((l) => !l.labelOnly)
-      .map((l) => ({
-        id: l.id,
-        label: l.label,
-        lat: l.lat,
-        lng: l.lng,
-        referenced: referenced.has(l.id),
-      }));
-  }, [resolved]);
-
-  const rows: CallRow[] = CALLS.map((call) => {
-    const r = resolved[call.id];
-    const w = wedgeById.get(call.id);
-
-    let state: CallState = "idle";
-    if (phase[call.id]) state = phase[call.id];
-    else if (errors[call.id]) state = "error";
-    else if (r) {
-      state = fix.inconsistentCallIds.includes(call.id)
-        ? "inconsistent"
-        : fix.unusableCallIds.includes(call.id)
-          ? "unusable"
-          : "consistent";
-    }
-
+  const rows: ReportRow[] = visible.map((rec) => {
+    const r = resolved[rec.id];
     return {
-      id: call.id,
-      callerLabel: call.callerLabel,
-      offsetSeconds: call.offsetSeconds,
-      state,
-      extraction: r?.extraction ?? null,
+      id: rec.id,
+      label: rec.label,
+      state: analyzing[rec.id] ? "analyzing" : errors[rec.id] ? "error" : r ? "done" : "idle",
+      severity: r ? r.extraction.severity_score : null,
+      place: r ? r.extraction.location.named_place : null,
       source: r?.source ?? null,
       latencyMs: r?.latencyMs ?? null,
-      bearingLabel: w
-        ? `${w.bearingDeg.toFixed(0)}° ±${w.spreadDeg.toFixed(0)}° via ${w.basis}${w.basis === "landmark" ? ` (${w.basisDetail})` : ""}`
-        : null,
-      error: errors[call.id] ?? null,
+      error: errors[rec.id] || null,
     };
   });
 
-  const processed = CALLS.filter((c) => resolved[c.id]);
-  const scenarioClock = processed.length
-    ? Math.max(...processed.map((c) => c.offsetSeconds))
-    : 0;
-  const anyLive = Object.values(resolved).some((r) => r.source === "live" || r.source === "cache");
-  const allFixture = processed.length > 0 && !anyLive;
+  const selectedFire = fires.find((f) => f.id === selectedId) ?? null;
 
-  async function playCall(id: string) {
-    const call = CALLS.find((c) => c.id === id);
-    if (!call) return;
+  async function playReport(id: string) {
+    const rec = [...ACTIVE, ...HELD].find((r) => r.id === id);
+    if (!rec) return;
 
     setActiveId(id);
     setErrors((e) => ({ ...e, [id]: "" }));
-    setPhase((p) => ({ ...p, [id]: "playing" }));
+    setAnalyzing((a) => ({ ...a, [id]: true }));
 
     audioRef.current?.pause();
-    const audio = new Audio(call.audio);
+    const audio = new Audio(rec.audio);
     audioRef.current = audio;
 
-    // Every path that could leave the sequence hanging must resolve this: a
-    // rejected play() (autoplay policy) fires neither onended nor onerror, and a
-    // stalled element fires neither either. The timeout is the backstop — the
-    // run-demo sequence must never wedge in front of an audience.
+    // Every path that could leave the sequence hanging must settle this: a rejected
+    // play() (autoplay policy) fires neither onended nor onerror, and a stalled element
+    // fires neither either. The timeout is the backstop.
     const finished = new Promise<void>((resolve) => {
       let done = false;
       const settle = () => {
@@ -144,13 +89,13 @@ export default function Page() {
         clearTimeout(timer);
         resolve();
       };
-      const timer = setTimeout(settle, 30_000);
+      const timer = setTimeout(settle, 20_000);
       audio.onended = settle;
       audio.onerror = settle;
       audio.play().catch(settle);
     });
 
-    const extraction = fetch("/api/extract", {
+    const analysis = fetch("/api/extract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ callId: id }),
@@ -160,31 +105,35 @@ export default function Page() {
         if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
         return body as Resolved;
       })
-      .then((body) => {
-        setResolved((prev) => ({ ...prev, [id]: body }));
-      })
-      .catch((err: Error) => {
-        setErrors((e) => ({ ...e, [id]: err.message }));
-      });
+      .then((body) => setResolved((prev) => ({ ...prev, [id]: body })))
+      .catch((err: Error) => setErrors((e) => ({ ...e, [id]: err.message })));
 
-    setPhase((p) => ({ ...p, [id]: "extracting" }));
-    await Promise.all([finished, extraction]);
-    setPhase((p) => {
-      const next = { ...p };
+    await Promise.all([finished, analysis]);
+    setAnalyzing((a) => {
+      const next = { ...a };
       delete next[id];
       return next;
     });
   }
 
-  async function runDemo() {
+  async function runAll() {
     setRunning(true);
     setResolved({});
     setErrors({});
-    setRevealTruth(false);
-    for (const call of CALLS) {
-      await playCall(call.id);
-      await new Promise((r) => setTimeout(r, 700));
+    setUploaded([]);
+    setSelectedId(null);
+    for (const rec of ACTIVE) {
+      await playReport(rec.id);
+      await new Promise((r) => setTimeout(r, 500));
     }
+    setActiveId(null);
+    setRunning(false);
+  }
+
+  async function uploadHeld(id: string) {
+    setUploaded((u) => (u.includes(id) ? u : [...u, id]));
+    setRunning(true);
+    await playReport(id);
     setActiveId(null);
     setRunning(false);
   }
@@ -193,41 +142,42 @@ export default function Page() {
     audioRef.current?.pause();
     setResolved({});
     setErrors({});
-    setPhase({});
+    setAnalyzing({});
+    setUploaded([]);
     setActiveId(null);
-    setRevealTruth(false);
+    setSelectedId(null);
   }
-
-  const confidenceColor =
-    fix.confidence === "HIGH" ? "text-emerald-400"
-    : fix.confidence === "MEDIUM" ? "text-amber-400"
-    : "text-slate-400";
 
   return (
     <main className="flex h-screen flex-col bg-[#0a0e13] text-slate-200">
       <header className="flex shrink-0 items-center gap-4 border-b border-slate-800 px-5 py-3">
         <div>
           <h1 className="text-sm font-semibold tracking-wide text-slate-100">
-            SmokeFix
+            EmberAlert
             <span className="ml-2 font-normal text-slate-500">
-              wildfire smoke-call triangulation
+              wildfire call triage &amp; prioritization
             </span>
           </h1>
-          <p className="text-[11px] text-slate-500">{SCENARIO.region}</p>
+          <p className="text-[11px] text-slate-500">{SCENARIO.regionLabel}</p>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          {allFixture && (
-            <span className="rounded bg-slate-800 px-2 py-1 text-[10px] uppercase tracking-wide text-slate-400 ring-1 ring-slate-700">
-              fixtures · no live model
-            </span>
-          )}
+          {HELD.map((h) => (
+            <button
+              key={h.id}
+              onClick={() => uploadHeld(h.id)}
+              disabled={running || uploaded.includes(h.id)}
+              className="rounded border border-amber-800 bg-amber-950/40 px-3 py-1.5 text-xs text-amber-300 hover:border-amber-600 disabled:opacity-40"
+            >
+              {uploaded.includes(h.id) ? `${h.label} added` : `+ Upload ${h.label}`}
+            </button>
+          ))}
           <button
-            onClick={runDemo}
+            onClick={runAll}
             disabled={running}
             className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-40"
           >
-            {running ? "running…" : "Run demo"}
+            {running ? "analyzing…" : "Run all reports"}
           </button>
           <button
             onClick={reset}
@@ -240,13 +190,30 @@ export default function Page() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[380px] shrink-0 flex-col overflow-y-auto border-r border-slate-800 p-4">
-          <CallTimeline rows={rows} activeId={activeId} onPlay={playCall} disabled={running} />
+        <aside className="flex w-[380px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-800 p-4">
+          <section>
+            <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Response priority
+            </h2>
+            <FireQueue fires={fires} selectedId={selectedId} onSelect={setSelectedId} />
+          </section>
 
-          <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
-            Specificity scores how precisely a caller described the location. It is never
-            a measure of how urgent or articulate they sounded — this system resolves
-            location only and does not rank whose emergency matters more.
+          <section>
+            <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Incoming reports
+            </h2>
+            <ReportFeed rows={rows} activeId={activeId} onPlay={playReport} disabled={running} />
+            {unlocatable.length > 0 && (
+              <p className="mt-2 text-[11px] text-slate-500">
+                {unlocatable.length} report(s) could not be located from the audio.
+              </p>
+            )}
+          </section>
+
+          <p className="mt-auto border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
+            Severity scores the fire, never the caller. A frightened caller and a composed
+            caller reporting the same fire get the same score — the ranking reflects danger,
+            not how someone sounds under stress.
           </p>
         </aside>
 
@@ -254,83 +221,52 @@ export default function Page() {
           <MapView
             center={SCENARIO.initialView}
             zoom={SCENARIO.initialView.zoom}
-            callers={CALLS.filter((c) => resolved[c.id] || phase[c.id]).map((c) => {
-              const row = rows.find((r) => r.id === c.id)!;
-              const state =
-                row.state === "consistent" || row.state === "inconsistent" || row.state === "unusable"
-                  ? row.state
-                  : row.state === "playing" || row.state === "extracting"
-                    ? "playing"
-                    : "idle";
-              return { id: c.id, label: c.callerLabel, lat: c.caller.lat, lng: c.caller.lng, state };
-            })}
-            landmarks={mapLandmarks}
-            wedges={wedges.map((w) => ({
-              callId: w.callId,
-              polygon: w.polygon,
-              status: fix.inconsistentCallIds.includes(w.callId)
-                ? ("inconsistent" as const)
-                : ("consistent" as const),
+            fires={fires.map((f) => ({
+              id: f.id,
+              rank: f.rank,
+              place: f.place,
+              lat: f.coords.lat,
+              lng: f.coords.lng,
+              severity: f.severity,
+              callCount: f.callCount,
             }))}
-            fix={fix.polygon}
-            fixCentroid={fix.centroid}
-            groundTruth={GROUND_TRUTH}
-            revealTruth={revealTruth}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
           />
 
-          {/* Leaflet's panes and controls sit at z-index 400-800, so overlay UI has
-              to be lifted above them explicitly. */}
-          <div className="pointer-events-none absolute bottom-4 left-4 z-[1000] w-[330px] rounded-lg border border-slate-700 bg-slate-950/85 p-3 backdrop-blur">
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-[10px] uppercase tracking-widest text-slate-500">
-                current fix
-              </span>
-              <span className={`font-mono text-xs font-semibold ${confidenceColor}`}>
-                {fix.confidence}
-              </span>
+          {selectedFire && (
+            // Leaflet panes sit at z-index 400-800, so overlay UI must be lifted above them.
+            <div className="pointer-events-none absolute bottom-4 left-4 z-[1000] w-[360px] rounded-lg border border-slate-700 bg-slate-950/90 p-3 backdrop-blur">
+              <div className="mb-1 flex items-baseline justify-between">
+                <span className="text-sm font-semibold text-slate-100">{selectedFire.place}</span>
+                <span className="text-[10px] uppercase tracking-widest text-slate-500">
+                  priority #{selectedFire.rank}
+                </span>
+              </div>
+              <p className="mb-2 text-[11px] text-slate-400">{selectedFire.reason}</p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-[11px]">
+                <dt className="text-slate-500">severity</dt>
+                <dd className="text-slate-200">{selectedFire.severity} / 100</dd>
+                <dt className="text-slate-500">size</dt>
+                <dd className="text-slate-200">{selectedFire.size}</dd>
+                <dt className="text-slate-500">spread</dt>
+                <dd className="text-slate-200">{selectedFire.spread}</dd>
+                <dt className="text-slate-500">position</dt>
+                <dd className="text-slate-200">
+                  {selectedFire.coords.lat.toFixed(4)}, {selectedFire.coords.lng.toFixed(4)}
+                </dd>
+                <dt className="text-slate-500">reports</dt>
+                <dd className="text-slate-200">{selectedFire.callCount}</dd>
+              </dl>
+              <div className="mt-2 space-y-1 border-t border-slate-800 pt-2">
+                {selectedFire.reports.map((r) => (
+                  <p key={r.id} className="text-[10px] italic leading-snug text-slate-500">
+                    &ldquo;{r.report.transcript}&rdquo;
+                  </p>
+                ))}
+              </div>
             </div>
-
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs">
-              <dt className="text-slate-500">search area</dt>
-              <dd className="text-slate-200">
-                {fix.polygon ? `${fix.areaKm2.toFixed(2)} km²` : "—"}
-              </dd>
-              <dt className="text-slate-500">position</dt>
-              <dd className="text-slate-200">
-                {fix.centroid
-                  ? `${fix.centroid.lat.toFixed(4)}, ${fix.centroid.lng.toFixed(4)}`
-                  : "—"}
-              </dd>
-              <dt className="text-slate-500">reports used</dt>
-              <dd className="text-slate-200">
-                {fix.consistentCallIds.length} consistent
-                {fix.inconsistentCallIds.length > 0 && (
-                  <span className="text-red-400"> · {fix.inconsistentCallIds.length} flagged</span>
-                )}
-              </dd>
-              <dt className="text-slate-500">scenario clock</dt>
-              <dd className="text-slate-200">
-                T+{Math.floor(scenarioClock / 60)}:
-                {String(scenarioClock % 60).padStart(2, "0")}
-              </dd>
-              {revealTruth && (
-                <>
-                  <dt className="text-slate-500">error</dt>
-                  <dd className="text-emerald-300">
-                    {fix.errorMeters !== null ? `${Math.round(fix.errorMeters)} m from ignition` : "—"}
-                  </dd>
-                </>
-              )}
-            </dl>
-
-            <button
-              onClick={() => setRevealTruth((v) => !v)}
-              disabled={!fix.polygon}
-              className="pointer-events-auto mt-2.5 w-full rounded border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:border-slate-600 disabled:opacity-40"
-            >
-              {revealTruth ? "Hide actual ignition point" : "Reveal actual ignition point"}
-            </button>
-          </div>
+          )}
         </section>
       </div>
     </main>

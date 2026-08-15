@@ -1,0 +1,21 @@
+{
+  "transcript": "There's a fire in Kamloops. It's roaring out of control and we need help. It's up north.",
+  "location": {
+    "named_place": "Kamloops",
+    "latitude": 50.6745,
+    "longitude": -120.3273,
+    "detail": "up north"
+  },
+  "fire": {
+    "size": "unknown",
+    "spread": "fast",
+    "out_of_control": true
+  },
+  "threat": {
+    "structures": false,
+    "lives": false,
+    "evacuation": false
+  },
+  "severity_score": 55,
+  "severity_reason": "The fire is reported as roaring out of control north of Kamloops, though no structures or direct threats to life were explicitly reported."
+}

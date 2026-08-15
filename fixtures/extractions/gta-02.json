@@ -1,9 +1,0 @@
-{
-  "landmarks": [{ "name": "Frenchman's Bay", "relation": "near" }],
-  "direction": { "compass": "WNW", "relative": "bearing west northwest from me" },
-  "distance_hint": { "value": 5, "unit": "km", "vagueness": "rough" },
-  "smoke": { "color": "grey", "volume": "column", "drift_direction": "east" },
-  "description_specificity": 0.8,
-  "secondhand": false,
-  "notes": "Formal bearing and range from the marina, with drift direction; caller places the fire in the valley in trees rather than structures."
-}

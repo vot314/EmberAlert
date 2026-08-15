@@ -1,0 +1,21 @@
+{
+  "transcript": "My house is burning because of the huge forest fire from Whistler, it's spreading quickly, please help!",
+  "location": {
+    "named_place": "Whistler",
+    "latitude": 50.1163,
+    "longitude": -122.9574,
+    "detail": ""
+  },
+  "fire": {
+    "size": "large",
+    "spread": "fast",
+    "out_of_control": true
+  },
+  "threat": {
+    "structures": true,
+    "lives": true,
+    "evacuation": false
+  },
+  "severity_score": 92,
+  "severity_reason": "A large, fast-spreading wildfire near Whistler is actively burning a residential home, posing an immediate danger to lives and structures."
+}

@@ -1,0 +1,21 @@
+{
+  "transcript": "I'm in Vancouver, British Columbia, and there's a small fire down the street. Can you come help, please?",
+  "location": {
+    "named_place": "Vancouver",
+    "latitude": 49.2827,
+    "longitude": -123.1207,
+    "detail": "down the street"
+  },
+  "fire": {
+    "size": "small",
+    "spread": "unknown",
+    "out_of_control": false
+  },
+  "threat": {
+    "structures": false,
+    "lives": false,
+    "evacuation": false
+  },
+  "severity_score": 20,
+  "severity_reason": "This is a small fire with no reported threats to lives, structures, or immediate evacuations."
+}

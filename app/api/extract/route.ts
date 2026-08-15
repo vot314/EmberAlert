@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import manifest from "@/data/calls.json";
+import manifest from "@/data/reports.json";
 import { resolveExtractionFromBytes } from "@/lib/cache";
 
 // Reads audio bytes and calls Gemini, so it cannot run on the edge runtime.
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 // window Vercel Hobby allows; on Pro this can go higher.
 export const maxDuration = 60;
 
-type CallRecord = { id: string; audio: string };
+type ReportRecord = { id: string; audio: string };
 
 function mimeFor(path: string): string {
   const p = path.toLowerCase();
@@ -30,16 +30,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "callId is required" }, { status: 400 });
   }
 
-  const call = (manifest.calls as CallRecord[]).find((c) => c.id === callId);
+  // Active reports plus the held-back ones (Silver Star), so a later upload resolves too.
+  const all = [...manifest.reports, ...manifest.heldReports] as ReportRecord[];
+  const call = all.find((c) => c.id === callId);
   if (!call) {
-    return NextResponse.json({ error: `unknown call ${callId}` }, { status: 404 });
+    return NextResponse.json({ error: `unknown report ${callId}` }, { status: 404 });
   }
 
   // Audio lives in public/ and is served statically. Fetch it by absolute URL rather
   // than reading the filesystem: public/ files are present on the local dev server's
   // disk but NOT on Vercel's serverless function filesystem, whereas the static URL
-  // works identically in both. `new URL(path, request.url)` resolves "/calls/x.wav"
-  // against the current origin (localhost in dev, the deployment domain on Vercel).
+  // works identically in both.
   let audioBytes: Buffer;
   try {
     const audioUrl = new URL(call.audio, request.url);

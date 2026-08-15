@@ -1,0 +1,16 @@
+{
+  "scenario": {
+    "name": "British Columbia — active wildfire reports",
+    "regionLabel": "British Columbia",
+    "initialView": { "lat": 50.1, "lng": -121.7, "zoom": 6.4 }
+  },
+  "reports": [
+    { "id": "vancouver", "audio": "/reports/vancouver.mp3", "label": "Vancouver", "offsetSeconds": 0 },
+    { "id": "kamloops", "audio": "/reports/kamloops.mp3", "label": "Kamloops", "offsetSeconds": 24 },
+    { "id": "whistler1", "audio": "/reports/whistler1.mp3", "label": "Whistler — caller 1", "offsetSeconds": 45 },
+    { "id": "whistler2", "audio": "/reports/whistler2.mp3", "label": "Whistler — caller 2", "offsetSeconds": 63 }
+  ],
+  "heldReports": [
+    { "id": "silverstarvernon", "audio": "/reports/silverstarvernon.mp3", "label": "Silver Star Prov. Park", "offsetSeconds": 95 }
+  ]
+}

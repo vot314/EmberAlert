@@ -1,129 +1,53 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Feature, Polygon, MultiPolygon } from "geojson";
+import { severityColor } from "@/lib/fires";
 
 /**
- * Leaflet, deliberately, not MapLibre.
- *
- * This view is a raster basemap with a handful of GeoJSON polygons and HTML
- * markers on top — none of MapLibre's vector-tile machinery is used. MapLibre
- * also spawns a tile-decoding web worker that Turbopack does not emit as a
- * loadable chunk: the worker request falls through to the app router, returns
- * HTML, and the map hangs before its style ever loads, with no error on the map's
- * own error channel. Leaflet has no worker and no WebGL requirement, so that whole
- * failure class disappears. For six polygons the rendering difference is nil.
- *
- * Marker icons are all divIcons, which also sidesteps Leaflet's well-known broken
- * default-icon paths under bundlers.
+ * Leaflet rather than MapLibre: this is a raster basemap with a handful of markers,
+ * and MapLibre's tile-decoding web worker is not emitted as a loadable chunk under
+ * Turbopack — the map hangs before its style loads, with nothing on its error channel.
+ * Marker icons are divIcons, which also avoids Leaflet's broken default icon paths.
  */
 
-export type MapCaller = {
+export type MapFire = {
   id: string;
-  label: string;
+  rank: number;
+  place: string;
   lat: number;
   lng: number;
-  state: "idle" | "playing" | "consistent" | "inconsistent" | "unusable";
-};
-
-export type MapLandmark = {
-  id: string;
-  label: string;
-  lat: number;
-  lng: number;
-  /** True when a caller actually named this place — highlighted so the operator can
-   *  see at a glance which landmark produced a bearing. */
-  referenced: boolean;
-};
-
-export type MapWedge = {
-  callId: string;
-  polygon: Feature<Polygon | MultiPolygon>;
-  status: "consistent" | "inconsistent";
+  severity: number;
+  callCount: number;
 };
 
 type Props = {
   center: { lat: number; lng: number };
   zoom: number;
-  callers: MapCaller[];
-  landmarks: MapLandmark[];
-  wedges: MapWedge[];
-  fix: Feature<Polygon | MultiPolygon> | null;
-  fixCentroid: { lat: number; lng: number } | null;
-  groundTruth: { lat: number; lng: number } | null;
-  revealTruth: boolean;
+  fires: MapFire[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 };
 
-// Esri's tile scheme is {z}/{y}/{x}. Swapping y and x yields a map that looks
-// plausible at a glance but is scrambled.
+// Esri's tile scheme is {z}/{y}/{x} — y before x. Carto below uses standard {z}/{x}/{y}.
 const ESRI_IMAGERY =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-
-/**
- * Transparent labels-only overlay: city, town, lake and river names province-wide.
- *
- * Leaflet does not supply place labels — it renders whatever tiles it is handed, and
- * World Imagery is pure satellite with no names on it at all. So labelling BC is a
- * tile layer, not a hand-authored gazetteer.
- *
- * Carto's "only_labels" variant rather than Esri's World_Boundaries_and_Places:
- * the Esri reference layer paints filled administrative polygons at low zoom, not
- * just text, which washed out the imagery wherever a coarse tile was in view. This
- * one carries text and nothing else, and its dark variant is drawn for exactly this
- * situation — light labels over a dark base.
- *
- * NOTE: Carto uses standard XYZ ({z}/{x}/{y}). Esri's imagery above uses {z}/{y}/{x}.
- * The two are not interchangeable.
- */
+// Labels-only overlay: place names with no filled polygons, so the imagery stays clean.
 const CARTO_LABELS =
   "https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}.png";
 
-const WEDGE_STYLE: Record<MapWedge["status"], L.PathOptions> = {
-  consistent: {
-    color: "#fbbf24",
-    weight: 1.4,
-    opacity: 0.75,
-    fillColor: "#f59e0b",
-    fillOpacity: 0.11,
-  },
-  inconsistent: {
-    color: "#ef4444",
-    weight: 1.4,
-    opacity: 0.8,
-    dashArray: "4 3",
-    fillColor: "#ef4444",
-    fillOpacity: 0.07,
-  },
-};
-
-const FIX_STYLE: L.PathOptions = {
-  color: "#67e8f9",
-  weight: 2.2,
-  opacity: 1,
-  fillColor: "#22d3ee",
-  fillOpacity: 0.35,
-};
-
-export default function MapView({
-  center,
-  zoom,
-  callers,
-  landmarks,
-  wedges,
-  fix,
-  fixCentroid,
-  groundTruth,
-  revealTruth,
-}: Props) {
+export default function MapView({ center, zoom, fires, selectedId, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const wedgeLayerRef = useRef<L.LayerGroup | null>(null);
-  const fixLayerRef = useRef<L.LayerGroup | null>(null);
-  const markerLayerRef = useRef<L.LayerGroup | null>(null);
-  const landmarkLayerRef = useRef<L.LayerGroup | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(zoom);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+  // Marker click handlers are bound once when a marker is created, so they must read
+  // the latest callback through a ref. Assigning during render is a React violation;
+  // an effect keeps it correct without re-binding every marker.
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -132,62 +56,24 @@ export default function MapView({
       center: [center.lat, center.lng],
       zoom,
       zoomControl: false,
-      attributionControl: true,
     });
     mapRef.current = map;
 
-    // Layer order matters and is not obvious.
-    //
-    //   live imagery -> live labels -> local imagery -> local labels
-    //
-    // Inside the prefetched box the opaque local imagery hides BOTH live layers, so
-    // only the local labels draw. Outside it the local tiles 404 to a transparent
-    // pixel and the live pair shows through. Every area therefore gets exactly one
-    // label pass — stacking two semi-transparent label layers inside the box left a
-    // visible rectangle where the prefetched region began.
-    //
-    // NEXT_PUBLIC_OFFLINE=1 omits the live layers entirely to rehearse the offline
-    // demo without pulling the network down.
-    const BLANK_TILE =
-      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
-    if (process.env.NEXT_PUBLIC_OFFLINE !== "1") {
-      L.tileLayer(ESRI_IMAGERY, {
-        maxZoom: 18,
-        attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
-      }).addTo(map);
-      L.tileLayer(CARTO_LABELS, {
-        maxZoom: 18,
-        className: "sf-labels",
-        attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
-      }).addTo(map);
-    }
-
-    L.tileLayer("/tiles/{z}/{x}/{y}.jpg", {
-      maxZoom: 13,
-      maxNativeZoom: 13,
-      errorTileUrl: BLANK_TILE,
+    L.tileLayer(ESRI_IMAGERY, {
+      maxZoom: 18,
+      attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
     }).addTo(map);
-
-    L.tileLayer("/tiles-labels/{z}/{x}/{y}.png", {
-      maxZoom: 13,
-      maxNativeZoom: 13,
+    L.tileLayer(CARTO_LABELS, {
+      maxZoom: 18,
       className: "sf-labels",
-      errorTileUrl: BLANK_TILE,
+      attribution: "Labels &copy; OpenStreetMap contributors, &copy; CARTO",
     }).addTo(map);
 
     L.control.zoom({ position: "topright" }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
 
-    landmarkLayerRef.current = L.layerGroup().addTo(map);
-    wedgeLayerRef.current = L.layerGroup().addTo(map);
-    fixLayerRef.current = L.layerGroup().addTo(map);
-    markerLayerRef.current = L.layerGroup().addTo(map);
-
-    // Leaflet measures its container on creation; inside a flex layout that can
+    // Leaflet measures its container on creation, which inside a flex layout can
     // happen before the layout settles.
-    // Landmark density is decluttered by zoom, so the layer redraws when it changes.
-    map.on("zoomend", () => setZoomLevel(map.getZoom()));
-
     const observer = new ResizeObserver(() => map.invalidateSize());
     observer.observe(containerRef.current);
 
@@ -195,113 +81,56 @@ export default function MapView({
       observer.disconnect();
       map.remove();
       mapRef.current = null;
-      wedgeLayerRef.current = null;
-      landmarkLayerRef.current = null;
-      fixLayerRef.current = null;
-      markerLayerRef.current = null;
+      layerRef.current = null;
     };
-    // Initial view is a mount-time concern; later prop changes must not rebuild
-    // the map.
+    // Initial view is a mount-time concern; later prop changes must not rebuild the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Landmarks. Place names (cities, lakes) come from the reference tile layer; this
-  // layer carries only the specific features callers cite, and highlights the ones
-  // actually named — which the basemap cannot know about.
+  // Markers, rebuilt wholesale — there are only a handful of fires.
   useEffect(() => {
-    const layer = landmarkLayerRef.current;
+    const layer = layerRef.current;
     if (!layer) return;
     layer.clearLayers();
 
-    for (const lm of landmarks) {
-      // A referenced landmark is the one that produced a bearing, so it must never
-      // be decluttered away — that is the label the operator most needs to see.
-      if (!lm.referenced && zoomLevel < 10) continue;
-      const state = lm.referenced ? "referenced" : "minor";
+    for (const f of fires) {
+      const color = severityColor(f.severity);
+      const selected = f.id === selectedId;
       const icon = L.divIcon({
         className: "sf-icon",
-        html: `<div class="sf-landmark" data-state="${state}"><span class="sf-lm-dot"></span><span class="sf-lm-label">${lm.label}</span></div>`,
+        html: `
+          <div class="sf-fire${selected ? " sf-fire-selected" : ""}" style="--fire:${color}">
+            <span class="sf-fire-pin"><span class="sf-fire-rank">${f.rank}</span></span>
+            <span class="sf-fire-label">
+              <b>${f.place}</b>
+              <i>severity ${f.severity}${f.callCount > 1 ? ` &middot; ${f.callCount} calls` : ""}</i>
+            </span>
+          </div>`,
         iconSize: [0, 0],
         iconAnchor: [0, 0],
       });
-      L.marker([lm.lat, lm.lng], { icon, interactive: false, zIndexOffset: -1000 }).addTo(layer);
+
+      L.marker([f.lat, f.lng], { icon, riseOnHover: true })
+        .addTo(layer)
+        .on("click", () => onSelectRef.current(f.id));
     }
-  }, [landmarks, zoomLevel]);
+  }, [fires, selectedId]);
 
-  // Wedges.
-  useEffect(() => {
-    const layer = wedgeLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-    for (const w of wedges) {
-      L.geoJSON(w.polygon, { style: WEDGE_STYLE[w.status] }).addTo(layer);
-    }
-  }, [wedges]);
-
-  // Current fix.
-  useEffect(() => {
-    const layer = fixLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-    if (fix) L.geoJSON(fix, { style: FIX_STYLE }).addTo(layer);
-  }, [fix]);
-
-  // Markers, rebuilt wholesale — there are at most eight.
-  useEffect(() => {
-    const layer = markerLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-
-    for (const c of callers) {
-      const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-marker" data-state="${c.state}"><span class="sf-dot"></span><span class="sf-label">${c.label}</span></div>`,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
-      L.marker([c.lat, c.lng], { icon, interactive: false }).addTo(layer);
-    }
-
-    if (fixCentroid) {
-      const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-fix"><span class="sf-cross">✛</span><span class="sf-fix-label">fix</span></div>`,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
-      L.marker([fixCentroid.lat, fixCentroid.lng], { icon, interactive: false }).addTo(layer);
-    }
-
-    if (revealTruth && groundTruth) {
-      const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-truth"><span class="sf-cross">✕</span><span class="sf-truth-label">ignition</span></div>`,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
-      L.marker([groundTruth.lat, groundTruth.lng], { icon, interactive: false }).addTo(layer);
-    }
-  }, [callers, fixCentroid, groundTruth, revealTruth]);
-
-  // Keep everything relevant in frame as the picture develops — but only refit when
-  // the set of plotted positions actually changes. Refitting on every caller status
-  // change would yank the view around while the operator is talking.
-  const fittedKeyRef = useRef("");
+  // Keep every located fire in frame as reports arrive.
+  const fittedRef = useRef("");
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || callers.length === 0) return;
+    if (!map || fires.length === 0) return;
+    const key = fires.map((f) => f.id).sort().join(",");
+    if (key === fittedRef.current) return;
+    fittedRef.current = key;
 
-    const key =
-      callers.map((c) => c.id).sort().join(",") +
-      (fixCentroid ? `|${fixCentroid.lat.toFixed(4)},${fixCentroid.lng.toFixed(4)}` : "");
-    if (key === fittedKeyRef.current) return;
-    fittedKeyRef.current = key;
-
-    const points: L.LatLngExpression[] = callers.map((c) => [c.lat, c.lng]);
-    if (fixCentroid) points.push([fixCentroid.lat, fixCentroid.lng]);
-
-    map.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 12, animate: true });
-  }, [callers, fixCentroid]);
+    map.fitBounds(L.latLngBounds(fires.map((f) => [f.lat, f.lng] as L.LatLngExpression)), {
+      padding: [90, 90],
+      maxZoom: 9,
+      animate: true,
+    });
+  }, [fires]);
 
   return <div ref={containerRef} className="h-full w-full bg-[#0a0e13]" />;
 }
