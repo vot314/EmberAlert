@@ -3,125 +3,55 @@
 import { useEffect, useRef, useState } from "react";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Feature, Polygon, MultiPolygon } from "geojson";
-
-/**
- * Leaflet, deliberately, not MapLibre.
- *
- * This view is a raster basemap with a handful of GeoJSON polygons and HTML
- * markers on top — none of MapLibre's vector-tile machinery is used. MapLibre
- * also spawns a tile-decoding web worker that Turbopack does not emit as a
- * loadable chunk: the worker request falls through to the app router, returns
- * HTML, and the map hangs before its style ever loads, with no error on the map's
- * own error channel. Leaflet has no worker and no WebGL requirement, so that whole
- * failure class disappears. For six polygons the rendering difference is nil.
- *
- * Marker icons are all divIcons, which also sidesteps Leaflet's well-known broken
- * default-icon paths under bundlers.
- */
-
-export type MapCaller = {
-  id: string;
-  label: string;
-  lat: number;
-  lng: number;
-  state: "idle" | "playing" | "consistent" | "inconsistent" | "unusable";
-};
+import type { Incident, IncidentSeverity } from "./IncidentList";
+import { type WindData } from "@/lib/wind";
 
 export type MapLandmark = {
   id: string;
   label: string;
   lat: number;
   lng: number;
-  /** True when a caller actually named this place — highlighted so the operator can
-   *  see at a glance which landmark produced a bearing. */
   referenced: boolean;
-};
-
-export type MapWedge = {
-  callId: string;
-  polygon: Feature<Polygon | MultiPolygon>;
-  status: "consistent" | "inconsistent";
 };
 
 type Props = {
   center: { lat: number; lng: number };
   zoom: number;
-  callers: MapCaller[];
-  landmarks: MapLandmark[];
-  wedges: MapWedge[];
-  fix: Feature<Polygon | MultiPolygon> | null;
-  fixCentroid: { lat: number; lng: number } | null;
-  groundTruth: { lat: number; lng: number } | null;
-  revealTruth: boolean;
+  incidents: Incident[];
+  selectedId: string | null;
+  showWind?: boolean;
+  windData?: WindData | null;
+  landmarks?: MapLandmark[];
+  onSelectIncident?: (id: string) => void;
 };
 
-// Esri's tile scheme is {z}/{y}/{x}. Swapping y and x yields a map that looks
-// plausible at a glance but is scrambled.
 const ESRI_IMAGERY =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
-/**
- * Transparent labels-only overlay: city, town, lake and river names province-wide.
- *
- * Leaflet does not supply place labels — it renders whatever tiles it is handed, and
- * World Imagery is pure satellite with no names on it at all. So labelling BC is a
- * tile layer, not a hand-authored gazetteer.
- *
- * Carto's "only_labels" variant rather than Esri's World_Boundaries_and_Places:
- * the Esri reference layer paints filled administrative polygons at low zoom, not
- * just text, which washed out the imagery wherever a coarse tile was in view. This
- * one carries text and nothing else, and its dark variant is drawn for exactly this
- * situation — light labels over a dark base.
- *
- * NOTE: Carto uses standard XYZ ({z}/{x}/{y}). Esri's imagery above uses {z}/{y}/{x}.
- * The two are not interchangeable.
- */
 const CARTO_LABELS =
   "https://basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}.png";
 
-const WEDGE_STYLE: Record<MapWedge["status"], L.PathOptions> = {
-  consistent: {
-    color: "#fbbf24",
-    weight: 1.4,
-    opacity: 0.75,
-    fillColor: "#f59e0b",
-    fillOpacity: 0.11,
-  },
-  inconsistent: {
-    color: "#ef4444",
-    weight: 1.4,
-    opacity: 0.8,
-    dashArray: "4 3",
-    fillColor: "#ef4444",
-    fillOpacity: 0.07,
-  },
-};
-
-const FIX_STYLE: L.PathOptions = {
-  color: "#67e8f9",
-  weight: 2.2,
-  opacity: 1,
-  fillColor: "#22d3ee",
-  fillOpacity: 0.35,
+const SEVERITY_COLORS: Record<IncidentSeverity, { bg: string; border: string; glow: string }> = {
+  Critical: { bg: "#ef4444", border: "#7f1d1d", glow: "rgba(239, 68, 68, 0.6)" },
+  High: { bg: "#f97316", border: "#7c2d12", glow: "rgba(249, 115, 22, 0.5)" },
+  Moderate: { bg: "#f59e0b", border: "#78350f", glow: "rgba(245, 158, 11, 0.4)" },
+  Low: { bg: "#10b981", border: "#064e3b", glow: "rgba(16, 185, 129, 0.3)" },
 };
 
 export default function MapView({
   center,
   zoom,
-  callers,
-  landmarks,
-  wedges,
-  fix,
-  fixCentroid,
-  groundTruth,
-  revealTruth,
+  incidents,
+  selectedId,
+  showWind = true,
+  windData = null,
+  landmarks = [],
+  onSelectIncident,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const wedgeLayerRef = useRef<L.LayerGroup | null>(null);
-  const fixLayerRef = useRef<L.LayerGroup | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const windLayerRef = useRef<L.LayerGroup | null>(null);
   const landmarkLayerRef = useRef<L.LayerGroup | null>(null);
   const [zoomLevel, setZoomLevel] = useState(zoom);
 
@@ -136,18 +66,11 @@ export default function MapView({
     });
     mapRef.current = map;
 
-    // Layer order matters and is not obvious.
-    //
-    //   live imagery -> live labels -> local imagery -> local labels
-    //
-    // Inside the prefetched box the opaque local imagery hides BOTH live layers, so
-    // only the local labels draw. Outside it the local tiles 404 to a transparent
-    // pixel and the live pair shows through. Every area therefore gets exactly one
-    // label pass — stacking two semi-transparent label layers inside the box left a
-    // visible rectangle where the prefetched region began.
-    //
-    // NEXT_PUBLIC_OFFLINE=1 omits the live layers entirely to rehearse the offline
-    // demo without pulling the network down.
+    // Create custom Leaflet pane for the dark overlay to ensure it sits directly behind all markers & vector fronts
+    const darkPane = map.createPane("darkOverlayPane");
+    darkPane.style.zIndex = "250";
+    darkPane.style.pointerEvents = "none";
+
     const BLANK_TILE =
       "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -176,16 +99,26 @@ export default function MapView({
       errorTileUrl: BLANK_TILE,
     }).addTo(map);
 
+    // Render dark background overlay on the custom darkOverlayPane (zIndex 250)
+    L.rectangle(
+      [
+        [-90, -180],
+        [90, 180],
+      ],
+      {
+        color: "none",
+        fillColor: "#020617",
+        fillOpacity: 0.5,
+        pane: "darkOverlayPane",
+      }
+    ).addTo(map);
+
     L.control.zoom({ position: "topright" }).addTo(map);
 
     landmarkLayerRef.current = L.layerGroup().addTo(map);
-    wedgeLayerRef.current = L.layerGroup().addTo(map);
-    fixLayerRef.current = L.layerGroup().addTo(map);
+    windLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
 
-    // Leaflet measures its container on creation; inside a flex layout that can
-    // happen before the layout settles.
-    // Landmark density is decluttered by zoom, so the layer redraws when it changes.
     map.on("zoomend", () => setZoomLevel(map.getZoom()));
 
     const observer = new ResizeObserver(() => map.invalidateSize());
@@ -195,27 +128,20 @@ export default function MapView({
       observer.disconnect();
       map.remove();
       mapRef.current = null;
-      wedgeLayerRef.current = null;
       landmarkLayerRef.current = null;
-      fixLayerRef.current = null;
+      windLayerRef.current = null;
       markerLayerRef.current = null;
     };
-    // Initial view is a mount-time concern; later prop changes must not rebuild
-    // the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Landmarks. Place names (cities, lakes) come from the reference tile layer; this
-  // layer carries only the specific features callers cite, and highlights the ones
-  // actually named — which the basemap cannot know about.
+  // Render landmarks if available
   useEffect(() => {
     const layer = landmarkLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
 
     for (const lm of landmarks) {
-      // A referenced landmark is the one that produced a bearing, so it must never
-      // be decluttered away — that is the label the operator most needs to see.
       if (!lm.referenced && zoomLevel < 10) continue;
       const state = lm.referenced ? "referenced" : "minor";
       const icon = L.divIcon({
@@ -228,80 +154,163 @@ export default function MapView({
     }
   }, [landmarks, zoomLevel]);
 
-  // Wedges.
+  // Render Continuous Non-Pulsing Wave Wind Fronts Layer with Inline Text along the curve
   useEffect(() => {
-    const layer = wedgeLayerRef.current;
-    if (!layer) return;
+    const layer = windLayerRef.current;
+    const map = mapRef.current;
+    if (!layer || !map) return;
     layer.clearLayers();
-    for (const w of wedges) {
-      L.geoJSON(w.polygon, { style: WEDGE_STYLE[w.status] }).addTo(layer);
+
+    if (!showWind || !windData) return;
+
+    for (const front of windData.waveFronts || []) {
+      if (!front.latLngs || front.latLngs.length < 2) continue;
+
+      // 1. Non-pulsing smooth curved polyline
+      const polyline = L.polyline(front.latLngs, {
+        color: front.color,
+        weight: 2.2,
+        opacity: 0.85,
+        smoothFactor: 1.5,
+        dashArray: "10, 6",
+      });
+      polyline.addTo(layer);
+
+      // 2. Line up text along the front line with no background box
+      const midIdx = Math.floor(front.latLngs.length / 2);
+      const p1 = front.latLngs[midIdx - 1] || front.latLngs[0];
+      const p2 = front.latLngs[midIdx] || front.latLngs[1];
+
+      // Calculate angle along the line segment in screen coordinates
+      const pt1 = map.latLngToContainerPoint(p1);
+      const pt2 = map.latLngToContainerPoint(p2);
+      let angleDeg = Math.atan2(pt2.y - pt1.y, pt2.x - pt1.x) * (180 / Math.PI);
+
+      // Keep text right-side up
+      if (angleDeg > 90 || angleDeg < -90) {
+        angleDeg += 180;
+      }
+
+      const badgeIcon = L.divIcon({
+        className: "wave-front-inline-label",
+        html: `
+          <div style="
+            transform: translate(-50%, -50%) rotate(${angleDeg.toFixed(1)}deg);
+            color: ${front.color};
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-shadow: 0 1px 3px #000000, 0 0 6px #000000, 0 0 10px #000000;
+            white-space: nowrap;
+            pointer-events: none;
+            user-select: none;
+          ">
+            ${front.speedKmH} km/h
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      });
+
+      L.marker(p2, { icon: badgeIcon, interactive: false, zIndexOffset: 500 }).addTo(layer);
     }
-  }, [wedges]);
+  }, [showWind, windData]);
 
-  // Current fix.
-  useEffect(() => {
-    const layer = fixLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-    if (fix) L.geoJSON(fix, { style: FIX_STYLE }).addTo(layer);
-  }, [fix]);
-
-  // Markers, rebuilt wholesale — there are at most eight.
+  // Render incident markers directly as dots on the map
   useEffect(() => {
     const layer = markerLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
 
-    for (const c of callers) {
-      const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-marker" data-state="${c.state}"><span class="sf-dot"></span><span class="sf-label">${c.label}</span></div>`,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
-      L.marker([c.lat, c.lng], { icon, interactive: false }).addTo(layer);
-    }
+    for (const inc of incidents) {
+      const isSelected = inc.id === selectedId;
+      const colors = SEVERITY_COLORS[inc.severity] || SEVERITY_COLORS.Moderate;
+      const pulseClass = inc.severity === "Critical" ? "animate-pulse" : "";
 
-    if (fixCentroid) {
-      const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-fix"><span class="sf-cross">✛</span><span class="sf-fix-label">fix</span></div>`,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-      });
-      L.marker([fixCentroid.lat, fixCentroid.lng], { icon, interactive: false }).addTo(layer);
-    }
+      const html = `
+        <div class="ember-marker ${isSelected ? "selected" : ""}" style="cursor: pointer;">
+          <div class="ember-dot-ring ${pulseClass}" style="
+            width: ${isSelected ? "28px" : "20px"};
+            height: ${isSelected ? "28px" : "20px"};
+            border-radius: 50%;
+            background-color: ${colors.bg};
+            border: 2px solid ${isSelected ? "#ffffff" : colors.border};
+            box-shadow: 0 0 14px ${colors.glow};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+          ">
+            <div style="
+              width: ${isSelected ? "10px" : "6px"};
+              height: ${isSelected ? "10px" : "6px"};
+              border-radius: 50%;
+              background-color: #ffffff;
+            "></div>
+          </div>
+          <div class="ember-label" style="
+            position: absolute;
+            top: ${isSelected ? "32px" : "24px"};
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            background: rgba(15, 23, 42, 0.95);
+            color: #f8fafc;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 4px;
+            border: 1px solid ${isSelected ? "#38bdf8" : "#334155"};
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            z-index: 10;
+          ">
+            ${inc.name} (${inc.severity})
+          </div>
+        </div>
+      `;
 
-    if (revealTruth && groundTruth) {
       const icon = L.divIcon({
-        className: "sf-icon",
-        html: `<div class="sf-truth"><span class="sf-cross">✕</span><span class="sf-truth-label">ignition</span></div>`,
+        className: "ember-icon",
+        html,
         iconSize: [0, 0],
-        iconAnchor: [0, 0],
+        iconAnchor: [isSelected ? 14 : 10, isSelected ? 14 : 10],
       });
-      L.marker([groundTruth.lat, groundTruth.lng], { icon, interactive: false }).addTo(layer);
-    }
-  }, [callers, fixCentroid, groundTruth, revealTruth]);
 
-  // Keep everything relevant in frame as the picture develops — but only refit when
-  // the set of plotted positions actually changes. Refitting on every caller status
-  // change would yank the view around while the operator is talking.
-  const fittedKeyRef = useRef("");
+      const marker = L.marker([inc.location.lat, inc.location.lng], {
+        icon,
+        interactive: true,
+        zIndexOffset: isSelected ? 1000 : 100,
+      });
+
+      if (onSelectIncident) {
+        marker.on("click", () => onSelectIncident(inc.id));
+      }
+
+      marker.addTo(layer);
+    }
+  }, [incidents, selectedId, onSelectIncident]);
+
+  // Center map on selected incident if clicked
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || callers.length === 0) return;
+    if (!map) return;
 
-    const key =
-      callers.map((c) => c.id).sort().join(",") +
-      (fixCentroid ? `|${fixCentroid.lat.toFixed(4)},${fixCentroid.lng.toFixed(4)}` : "");
-    if (key === fittedKeyRef.current) return;
-    fittedKeyRef.current = key;
+    if (selectedId) {
+      const inc = incidents.find((i) => i.id === selectedId);
+      if (inc) {
+        map.flyTo([inc.location.lat, inc.location.lng], 12, { animate: true, duration: 0.8 });
+      }
+    } else if (incidents.length > 0) {
+      const points: L.LatLngExpression[] = incidents.map((i) => [i.location.lat, i.location.lng]);
+      map.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 12, animate: true });
+    }
+  }, [selectedId, incidents]);
 
-    const points: L.LatLngExpression[] = callers.map((c) => [c.lat, c.lng]);
-    if (fixCentroid) points.push([fixCentroid.lat, fixCentroid.lng]);
-
-    map.fitBounds(L.latLngBounds(points), { padding: [80, 80], maxZoom: 12, animate: true });
-  }, [callers, fixCentroid]);
-
-  return <div ref={containerRef} className="h-full w-full bg-[#0a0e13]" />;
+  return (
+    <div className="relative h-full w-full bg-[#0a0e13]">
+      <div ref={containerRef} className="h-full w-full" />
+    </div>
+  );
 }
