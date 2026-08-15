@@ -26,7 +26,7 @@ class UrgencyLevel(str, Enum):
 
 class WildfireReport(BaseModel):
     location: Optional[str] = Field(
-        description="The location or region of the wildfire mentioned in the report."
+        description="The approximate coordinates, in latitude and longitude, of the wildfire location mentioned in the report."
     )
     size: Optional[str] = Field(
         description="Estimated size or area affected (e.g., '50 acres', '100 hectares', 'small spot fire')."
@@ -45,7 +45,9 @@ client = genai.Client()
 
 # 3. Upload the Audio File
 # Large or standard audio files should be uploaded via client.files.upload
-audio_file = client.files.upload(file="output.wav")
+# audio_file = client.files.upload(file="output.wav")
+audio_file = client.files.upload(file="whistler2.mp3")
+
 
 # 4. Generate Structured Output
 response = client.models.generate_content(
