@@ -1,0 +1,74 @@
+{
+  "scenario": {
+    "name": "Okanagan Valley — smoke reported west of the lake",
+    "region": "West Kelowna / Peachland, British Columbia",
+    "regionKey": "okanagan",
+    "groundTruth": { "lat": 49.902, "lng": -119.635 },
+    "groundTruthNote": "Ignition point used to author this scenario. Known only to the demo, never to the pipeline — it exists so the UI can report how far off the computed fix landed.",
+    "initialView": { "lat": 49.868, "lng": -119.575, "zoom": 10.4 },
+    "expect": { "confidence": "HIGH", "maxErrorMeters": 1500 }
+  },
+  "calls": [
+    {
+      "id": "call-01",
+      "audio": "/calls/call-01.wav",
+      "voice": "Karen",
+      "rate": 185,
+      "callerLabel": "Kelowna waterfront",
+      "caller": { "lat": 49.888, "lng": -119.496 },
+      "offsetSeconds": 0,
+      "script": "Yeah, hi, I'm down at the waterfront in Kelowna. There's a huge column of smoke going up across the lake, west of us, maybe west northwest? It's grey and it's really climbing. I can't tell how far, it's all the way across the water. Somebody needs to look at this."
+    },
+    {
+      "id": "call-02",
+      "audio": "/calls/call-02.wav",
+      "voice": "Daniel",
+      "rate": 160,
+      "callerLabel": "Peachland, Beach Avenue",
+      "caller": { "lat": 49.777, "lng": -119.737 },
+      "offsetSeconds": 38,
+      "script": "Hello. I'm calling from Peachland, down on Beach Avenue. There's smoke up the lake to the north of me, north northeast I'd say. A big grey column. It's a long way off, I couldn't tell you how far. I just thought somebody ought to know about it."
+    },
+    {
+      "id": "call-03",
+      "audio": "/calls/call-03.wav",
+      "voice": "Fred",
+      "rate": 195,
+      "callerLabel": "West Kelowna, Shannon Lake",
+      "caller": { "lat": 49.822, "lng": -119.632 },
+      "offsetSeconds": 71,
+      "script": "Hi, yeah, West Kelowna, the Shannon Lake area. There's smoke straight north of me, up past the Rose Valley reservoir, back in the hills behind it. Thick grey column, drifting east. It's definitely past the reservoir, up in the trees."
+    },
+    {
+      "id": "call-04",
+      "audio": "/calls/call-04.wav",
+      "voice": "Ralph",
+      "rate": 175,
+      "callerLabel": "Bear Creek (off-duty)",
+      "caller": { "lat": 49.918, "lng": -119.542 },
+      "offsetSeconds": 96,
+      "script": "Dispatch, I'm off duty, I'm parked at Bear Creek. I've got a well developed grey column bearing west southwest from my position, I'd call it seven kilometres out. Drifting east northeast. Looks like it's established in timber, not grass."
+    },
+    {
+      "id": "call-05",
+      "audio": "/calls/call-05.wav",
+      "voice": "Kathy",
+      "rate": 180,
+      "callerLabel": "Kelowna Airport",
+      "caller": { "lat": 49.956, "lng": -119.378 },
+      "offsetSeconds": 124,
+      "expectedOutlier": true,
+      "script": "Hi, I'm out by the airport on Airport Way. There's smoke off to the northeast of me, low, kind of whitish. Maybe a couple of kilometres out. It's probably somebody burning, but you said to call anything in."
+    },
+    {
+      "id": "call-06",
+      "audio": "/calls/call-06.wav",
+      "voice": "Junior",
+      "rate": 190,
+      "callerLabel": "West Kelowna, Two Eagles",
+      "caller": { "lat": 49.833, "lng": -119.602 },
+      "offsetSeconds": 158,
+      "script": "Yeah, I'm on the golf course in West Kelowna, Two Eagles. Big column north northwest of here, I'd guess eight kilometres out. It's grown a lot in the last ten minutes. Grey, going hard."
+    }
+  ]
+}

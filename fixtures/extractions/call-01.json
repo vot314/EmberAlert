@@ -1,0 +1,9 @@
+{
+  "landmarks": [],
+  "direction": { "compass": "WNW", "relative": "across the lake from the Kelowna waterfront" },
+  "distance_hint": { "value": 0, "unit": "none", "vagueness": "none" },
+  "smoke": { "color": "grey", "volume": "column", "drift_direction": "" },
+  "description_specificity": 0.35,
+  "secondhand": false,
+  "notes": "Direction given but hedged between west and west-northwest; caller explicitly cannot judge distance across open water."
+}

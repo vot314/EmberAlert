@@ -1,0 +1,9 @@
+{
+  "landmarks": [],
+  "direction": { "compass": "NNE", "relative": "up the lake to the north" },
+  "distance_hint": { "value": 0, "unit": "none", "vagueness": "none" },
+  "smoke": { "color": "grey", "volume": "column", "drift_direction": "" },
+  "description_specificity": 0.25,
+  "secondhand": false,
+  "notes": "Compass sense only, no distance; caller states the smoke is a long way off."
+}

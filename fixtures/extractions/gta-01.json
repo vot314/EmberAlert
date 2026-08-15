@@ -1,0 +1,9 @@
+{
+  "landmarks": [{ "name": "Guild park", "relation": "near" }],
+  "direction": { "compass": "NE", "relative": "off to the northeast of me, out over the trees" },
+  "distance_hint": { "value": 0, "unit": "none", "vagueness": "none" },
+  "smoke": { "color": "grey", "volume": "column", "drift_direction": "" },
+  "description_specificity": 0.4,
+  "secondhand": false,
+  "notes": "Compass direction only; caller names their own location as the landmark and explicitly cannot judge distance. Reports it looks like bush rather than a structure."
+}

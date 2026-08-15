@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0e13;
+  --foreground: #e2e8f0;
+  --font-geist-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-geist-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans);
+}
+
+/* ---- Map markers -------------------------------------------------------- */
+/* Rendered as HTML markers rather than symbol layers: a symbol layer needs a
+   glyph endpoint, which would put a font CDN in the demo's critical path. */
+
+.sf-marker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transform: translateX(-5px);
+}
+
+.sf-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: #38bdf8;
+  box-shadow: 0 0 0 2px rgb(2 6 23 / 0.85);
+  flex: none;
+}
+
+.sf-label {
+  font: 500 10px/1.1 var(--font-geist-mono), ui-monospace, monospace;
+  color: #cbd5e1;
+  background: rgb(2 6 23 / 0.78);
+  padding: 2px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.01em;
+}
+
+.sf-marker[data-state="playing"] .sf-dot {
+  background: #7dd3fc;
+  animation: sf-pulse 1s ease-in-out infinite;
+}
+.sf-marker[data-state="consistent"] .sf-dot { background: #fbbf24; }
+.sf-marker[data-state="inconsistent"] .sf-dot { background: #ef4444; }
+.sf-marker[data-state="unusable"] .sf-dot { background: #64748b; }
+
+@keyframes sf-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.65; }
+}
+
+.sf-fix,
+.sf-truth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.sf-fix .sf-cross {
+  font-size: 20px;
+  line-height: 1;
+  color: #22d3ee;
+  text-shadow: 0 0 6px rgb(2 6 23 / 0.95);
+}
+
+.sf-truth .sf-cross {
+  font-size: 16px;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 0 6px rgb(2 6 23 / 0.95);
+}
+
+.sf-fix-label,
+.sf-truth-label {
+  font: 600 9px/1 var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgb(2 6 23 / 0.8);
+}
+
+.sf-fix-label { color: #67e8f9; }
+.sf-truth-label { color: #e2e8f0; }
+
+/* ---- Landmark labels ---------------------------------------------------- */
+/* Deliberately quieter than caller markers: they orient the viewer without
+   competing with the callers and the fix, which are what the demo is about. */
+
+.sf-landmark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transform: translate(-3px, -6px);
+}
+
+.sf-lm-dot {
+  width: 4px;
+  height: 4px;
+  flex: none;
+  transform: rotate(45deg);
+  background: #64748b;
+  box-shadow: 0 0 0 1.5px rgb(2 6 23 / 0.8);
+}
+
+.sf-lm-label {
+  font: 500 9px/1.1 var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: #94a3b8;
+  text-shadow:
+    0 0 3px rgb(2 6 23 / 0.95),
+    0 1px 2px rgb(2 6 23 / 0.9);
+}
+
+/* Towns and the lake: orientation anchors, slightly stronger, always visible. */
+.sf-landmark[data-state="major"] .sf-lm-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #cbd5e1;
+  letter-spacing: 0.06em;
+}
+.sf-landmark[data-state="major"] .sf-lm-dot { background: #94a3b8; }
+
+/* A landmark a caller actually named — this is the one that produced a bearing. */
+.sf-landmark[data-state="referenced"] .sf-lm-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgb(2 6 23 / 0.72);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.sf-landmark[data-state="referenced"] .sf-lm-dot {
+  width: 6px;
+  height: 6px;
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgb(2 6 23 / 0.85);
+}
+
+/* Do NOT add mix-blend-mode here: each tile layer container becomes its own stacking
+   context, and the live and prefetched label layers then composited differently,
+   drawing a visible rectangle exactly where the prefetched region began. Plain
+   opacity composites identically in both. */
+.sf-labels {
+  opacity: 0.9;
+}
+
+/* ---- Leaflet chrome ----------------------------------------------------- */
+
+/* Leaflet paints its container light grey by default, which flashes white before
+   tiles arrive and stays white if they never do. */
+.leaflet-container {
+  background: #0a0e13;
+  font-family: inherit;
+}
+
+/* divIcons are declared with a zero-size box so the label can flow naturally from
+   the anchor point rather than being centred in a fixed box. */
+.sf-icon {
+  width: auto !important;
+  height: auto !important;
+  overflow: visible;
+}
+
+.leaflet-control-attribution {
+  background: rgb(2 6 23 / 0.72) !important;
+  color: #64748b !important;
+  font-size: 10px !important;
+}
+.leaflet-control-attribution a { color: #94a3b8 !important; }
+
+.leaflet-bar a {
+  background: rgb(2 6 23 / 0.85) !important;
+  color: #cbd5e1 !important;
+  border-color: #1e293b !important;
+}
+.leaflet-bar a:hover { background: rgb(15 23 42 / 0.95) !important; }

@@ -1,0 +1,43 @@
+{
+  "scenario": {
+    "name": "Rouge Valley — smoke reported in the park",
+    "region": "Rouge National Urban Park, Greater Toronto Area",
+    "regionKey": "gta",
+    "groundTruth": { "lat": 43.82, "lng": -79.145 },
+    "groundTruthNote": "Ignition point used to author this scenario, in the forested Rouge valley between the zoo and the lake. Known only to the demo, never to the pipeline.",
+    "initialView": { "lat": 43.812, "lng": -79.17, "zoom": 11.2 },
+    "expect": { "confidence": "MEDIUM", "maxErrorMeters": 2000 }
+  },
+  "calls": [
+    {
+      "id": "gta-01",
+      "audio": "/calls/gta-01.wav",
+      "voice": "Kathy",
+      "rate": 190,
+      "callerLabel": "Scarborough, Guildwood",
+      "caller": { "lat": 43.748, "lng": -79.196 },
+      "offsetSeconds": 0,
+      "script": "Hi, yeah, I'm on Guildwood Parkway in Scarborough, near the Guild park. There's a big grey column of smoke off to the northeast of me, out over the trees. It's a fair way out, I couldn't tell you how far. It's not a house fire, it looks like bush, and it's getting bigger."
+    },
+    {
+      "id": "gta-02",
+      "audio": "/calls/gta-02.wav",
+      "voice": "Daniel",
+      "rate": 172,
+      "callerLabel": "Pickering, Frenchman's Bay",
+      "caller": { "lat": 43.813, "lng": -79.079 },
+      "offsetSeconds": 47,
+      "script": "I'm down at Frenchman's Bay in Pickering, by the marina. I've got a grey column bearing west northwest from me, about five kilometres out. It's drifting east over the lake. It looks like it's down in the valley, in the trees, not structures."
+    },
+    {
+      "id": "gta-03",
+      "audio": "/calls/gta-03.wav",
+      "voice": "Junior",
+      "rate": 186,
+      "callerLabel": "Markham, Milne Park",
+      "caller": { "lat": 43.865, "lng": -79.283 },
+      "offsetSeconds": 95,
+      "script": "This is from Markham, I'm at Milne Park off Highway 7. There's heavy smoke to the southeast, out past the zoo, back in the Rouge valley. Thick grey and climbing fast. Definitely past the zoo, in the parkland behind it."
+    }
+  ]
+}
