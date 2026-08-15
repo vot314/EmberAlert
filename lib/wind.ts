@@ -20,7 +20,8 @@ export type WindGridPoint = {
 export type ContinuousWaveFront = {
   id: string;
   speedKmH: number;
-  directionDeg: number;
+  directionDeg: number; // wind direction (deg coming FROM)
+  flowAngleDeg: number; // direction wind is blowing TOWARD (directionDeg - 180 + 360) % 360
   color: string;
   latLngs: [number, number][];
 };
@@ -33,8 +34,40 @@ export function degreesToCardinal(deg: number): string {
 }
 
 /**
- * Fetch real-time wind forecast data from Open-Meteo API with fallback
- * Doubled geographic coverage region size
+ * Maps wind speed (10-45 km/h) to a gradient from light blue (#93c5fd) to dark blue (#1e3a8a)
+ */
+export function getWindSpeedBlueGradient(speedKmH: number): string {
+  const minSpeed = 10;
+  const maxSpeed = 40;
+  const ratio = Math.min(1, Math.max(0, (speedKmH - minSpeed) / (maxSpeed - minSpeed)));
+
+  // Color Stops: Light Sky Blue -> Vibrant Royal Blue -> Deep Dark Navy Blue
+  if (ratio < 0.33) {
+    // #93c5fd -> #3b82f6
+    const t = ratio / 0.33;
+    const r = Math.round(147 + (59 - 147) * t);
+    const g = Math.round(197 + (130 - 197) * t);
+    const b = Math.round(253 + (246 - 253) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  } else if (ratio < 0.66) {
+    // #3b82f6 -> #1d4ed8
+    const t = (ratio - 0.33) / 0.33;
+    const r = Math.round(59 + (29 - 59) * t);
+    const g = Math.round(130 + (78 - 130) * t);
+    const b = Math.round(246 + (216 - 246) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  } else {
+    // #1d4ed8 -> #172554
+    const t = (ratio - 0.66) / 0.34;
+    const r = Math.round(29 + (23 - 29) * t);
+    const g = Math.round(78 + (37 - 78) * t);
+    const b = Math.round(216 + (84 - 216) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+}
+
+/**
+ * Fetch real-time wind forecast data with 2x doubled geographic area
  */
 export async function fetchRealtimeWind(lat: number = 49.868, lng: number = -119.575): Promise<WindData> {
   try {
@@ -82,20 +115,20 @@ export async function fetchRealtimeWind(lat: number = 49.868, lng: number = -119
 }
 
 /**
- * Generate 7x7 grid points spanning DOUBLED geographic area (~1.0° lat x 1.4° lng)
+ * Generate 11x11 grid points spanning DOUBLED geographic area (~2.8° lat x 4.4° lng)
  */
 function generateDoubledGridPoints(centerLat: number, centerLng: number, baseSpeedKmH: number, baseDirDeg: number): WindGridPoint[] {
   const points: WindGridPoint[] = [];
-  const latStep = 0.14; // Doubled step size
-  const lngStep = 0.20; // Doubled step size
+  const latStep = 0.28; // Doubled step size
+  const lngStep = 0.44; // Doubled step size
 
   let idx = 0;
-  for (let r = -3; r <= 3; r++) {
-    for (let c = -3; c <= 3; c++) {
+  for (let r = -5; r <= 5; r++) {
+    for (let c = -5; c <= 5; c++) {
       const lat = centerLat + r * latStep;
       const lng = centerLng + c * lngStep;
-      const localSpeed = Math.max(10, Math.round(baseSpeedKmH + (r * 3 - c * 2.5)));
-      const localDir = (baseDirDeg + (r * 4 + c * 5) + 360) % 360;
+      const localSpeed = Math.max(10, Math.round(baseSpeedKmH + (r * 2.5 - c * 2)));
+      const localDir = (baseDirDeg + (r * 3 + c * 4) + 360) % 360;
 
       points.push({
         id: `grid-${idx++}`,
@@ -112,39 +145,38 @@ function generateDoubledGridPoints(centerLat: number, centerLng: number, baseSpe
 }
 
 /**
- * Generate continuous wave front lines connecting regions of similar wind speed and magnitude across 2x area
+ * Generate 14 continuous wave front lines across doubled region with blue speed gradient
  */
 function generateContinuousWaveFronts(centerLat: number, centerLng: number, baseSpeedKmH: number, baseDirDeg: number): ContinuousWaveFront[] {
   const fronts: ContinuousWaveFront[] = [];
-  const latStep = 0.14;
-  const lngStep = 0.22;
+  const latStep = 0.16;
+  const lngStep = 0.24;
 
-  // Generate 6 continuous wave fronts traversing perpendicular to wind direction across expanded region
-  const colors = ["#38bdf8", "#38bdf8", "#0ea5e9", "#f59e0b", "#f97316", "#ef4444"];
-  const speedOffsets = [-6, -3, 0, 4, 8, 12];
+  const speedOffsets = [-12, -10, -8, -6, -4, -2, 0, 2, 5, 8, 11, 14, 17, 20];
 
-  for (let f = -3; f <= 2; f++) {
-    const frontIdx = f + 3;
-    const waveSpeed = Math.max(12, Math.round(baseSpeedKmH + speedOffsets[frontIdx]));
-    const color = colors[frontIdx] || "#38bdf8";
+  let frontCounter = 0;
+  for (let f = -7; f <= 6; f++) {
+    const waveSpeed = Math.max(10, Math.round(baseSpeedKmH + speedOffsets[frontCounter]!));
+    const color = getWindSpeedBlueGradient(waveSpeed);
+    const localDir = (baseDirDeg + f * 2.5 + 360) % 360;
+    const flowAngleDeg = (localDir + 180) % 360; // Direction wind is blowing TOWARD
 
-    // Build curved wave line across longitude span
     const latLngs: [number, number][] = [];
     const baseLat = centerLat + f * latStep;
 
-    // Create 9 control points along the wave front with smooth undulating sine offset
-    for (let col = -4; col <= 4; col++) {
+    // Create 15 control points along each wave front curve spanning wide longitude
+    for (let col = -7; col <= 7; col++) {
       const lng = centerLng + col * lngStep;
-      // Smooth continuous wave oscillation along the front
-      const waveOffset = Math.sin(col * 0.8 + f * 1.2) * 0.045 + Math.cos(col * 0.5) * 0.025;
+      const waveOffset = Math.sin(col * 0.6 + f * 1.1) * 0.055 + Math.cos(col * 0.4) * 0.03;
       const lat = baseLat + waveOffset;
       latLngs.push([lat, lng]);
     }
 
     fronts.push({
-      id: `front-${frontIdx}`,
+      id: `front-${frontCounter++}`,
       speedKmH: waveSpeed,
-      directionDeg: (baseDirDeg + f * 3 + 360) % 360,
+      directionDeg: localDir,
+      flowAngleDeg,
       color,
       latLngs,
     });
