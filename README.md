@@ -1,100 +1,85 @@
 # EmberAlert
 
+Turns emergency wildfire calls into a ranked response plan.
 
-Forest fires are bad and can be overwhelming, especially with multiple at once!
-The solution? EmberAlert!!
-Our program collects calls and analyzes them using Gemini API for factors such as the location, the size, the amount of people affected, how fast it grows, etc. and also the amount of calls from the same location. 
-Then we rank the severity of the wildfires based on these factors, allowing firefighters to approach situations with a more objective plan.
+## What it does
 
----
+When several wildfires are burning at once, dispatchers have to decide which one to send
+crews to first. EmberAlert listens to the 911 call recordings, works out where each fire
+is, scores how dangerous it is, and puts them in priority order on a map. Calls about the
+same fire are merged automatically, and a fire that several people report independently
+is treated as more urgent.
 
-## Implementation status
-
-What is built and working in this repo is the **location** half of the above: turning
-several vague verbal reports into one triangulated coordinate with a confidence score.
-Callers describe smoke by landmark and bearing — *"a column behind the ridge past the
-reservoir"* — and crews cannot launch on a sentence. Each caller's own position is
-known, so each report yields a bearing and a rough range. Intersect the wedges and you
-have a fix.
-
-**Severity ranking is not implemented**, and it is worth a team decision before it is.
-See "A note on what this does not do" at the end of this file — ranking whose emergency
-matters most has real bias and liability problems, and the location problem turned out
-to be the one nobody has solved.
-
-## Setup
+## Quick start
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000 — click "Run demo"
+npm run dev
 ```
 
-That's it. No API key is required: committed fixture extractions drive the demo. To run
-the live Gemini pipeline instead, copy `.env.example` to `.env.local` and add a key.
+Open [localhost:3000](http://localhost:3000) and click **Analyse all calls**. No API key
+is needed — the repo ships with saved Gemini results so it works straight away.
 
 ## How it works
 
-**Gemini handles language, code handles geometry.** The model extracts only what the
-caller said — landmarks, direction words, distance cues, smoke description — as
-structured JSON. Every bearing, wedge and intersection is computed by Turf.js. The model
-never produces a coordinate, so the fix is deterministic and auditable.
+Each recording is sent to **Gemini** as audio, with no separate transcription step. The
+model returns structured JSON: the place name, its coordinates, what is burning and what
+is threatened, and a severity score from 0 to 100. Code then does all the maths — fires
+within 25 km of each other are merged into one incident, and incidents are sorted by
+severity with a bonus for extra corroborating calls. The model never calculates a
+position or a ranking itself, so those results are predictable and easy to check.
 
-Extractions resolve through three tiers: `.cache/` (real model output from a previous
-run, keyed by audio hash), then `fixtures/extractions/` (committed, hand-authored), then
-a live API call. `DEMO_MODE=replay` stops at tier two and never touches the network.
+## The calls
 
-Fusion is outlier-tolerant. A naive fold returns nothing the moment one wedge misses, so
-each wedge is scored by how many others it agrees with, folded most-supported first, and
-flagged rather than fatal when it cannot be reconciled. Call 5 in the scripted set is a
-deliberate outlier and gets isolated.
+Five recordings from across British Columbia, in `public/reports/`.
+
+| Call | Fire | Severity |
+|---|---|---|
+| whistler1 + whistler2 | Whistler — house burning, spreading fast | **100** Critical |
+| kamloops | Kamloops — out of control | 55 High |
+| silverstarvernon | Silver Star Park — smoke near a campground | 30 Moderate |
+| vancouver | Vancouver — small street fire | 20 Low |
+
+The two Whistler callers describe the same fire, so they merge into a single incident.
+
+## Using a live API key
+
+Copy `.env.example` to `.env.local` and add a `GEMINI_API_KEY` to analyse the audio live
+instead of using the saved results. The free tier allows **20 requests per day per
+model**, so if you run out, set `GEMINI_MODEL` to another one — `gemini-3.5-flash-lite`
+and `gemini-flash-lite-latest` both work. Results are cached on disk, so repeat runs cost
+nothing.
+
+## Project layout
+
+| Path | What it is |
+|---|---|
+| `app/page.tsx` | The dashboard |
+| `app/api/extract/` | Sends a recording to Gemini |
+| `lib/schema.ts` | What we ask Gemini for |
+| `lib/fires.ts` | Merging and ranking |
+| `lib/wind.ts` | Live wind fronts (Open-Meteo) |
+| `components/MapView.tsx` | Leaflet map, markers and wind |
+| `fixtures/extractions/` | Saved results, used when there is no key |
+| `backend/` | Separate Python experiment |
 
 ## Commands
 
 ```bash
-npm run verify        # offline check that the scenario converges, no key needed
-npm run demo          # DEMO_MODE=replay — fixtures only, never calls the network
-npm run gen:audio     # re-render the call WAVs (macOS `say`)
+npm run dev       # start the app
+npm run build     # production build
+npm run analyze   # re-run Gemini on all recordings and refresh the saved results
+npm run lint      # eslint
 ```
 
-`node scripts/prefetch-tiles.mjs` refreshes the offline basemap: satellite imagery in
-`public/tiles/` and place labels in `public/tiles-labels/` (committed, ~18 MB total,
-wide coverage at low zoom and scenario-area coverage at high zoom).
+## A note on scoring
 
-Place names across BC come from a labels-only tile overlay, not a hand-authored list —
-Leaflet renders whatever tiles it is given, and Esri World Imagery carries no names at
-all. The custom marker layer carries only the specific features callers cite, and
-highlights the ones actually named. `NEXT_PUBLIC_OFFLINE=1` drops the live tile layer so you can
-rehearse the offline demo without pulling the network down.
+Severity scores the **fire**, never the caller. A panicking caller and a calm caller
+reporting the same fire get the same score, because the ranking reflects danger rather
+than how someone sounds under pressure. Scoring people on how clearly they speak under
+stress would penalise exactly the callers most likely to be in trouble.
 
-## Scenario
+## Built with
 
-Six calls reporting one fire west of Okanagan Lake, BC. Five converge; the sixth is a
-separate low white plume near the airport that the fusion step isolates.
-
-| extractions | search area | error vs ignition | confidence |
-|---|---|---|---|
-| authored fixtures | 8.97 km² | 123 m | HIGH |
-| live `gemini-3.5-flash` | 13.66 km² | 111 m | MEDIUM |
-
-The live run lands at MEDIUM because a wider search area is the honest read on five
-voice reports where only one gave a distance — and it is nonetheless accurate to 111 m.
-
-`npx tsx scripts/compare-live.ts` re-runs the live model and diffs every field against
-the fixtures. `npx tsx scripts/collapse-curve.ts` prints how the area shrinks per call.
-A second scenario in `data/calls-gta.json` covers Rouge Park in the GTA; pass any
-manifest path to those scripts to run it.
-
-## A note on what this does not do
-
-`description_specificity` measures how geometrically precise a caller's description was.
-It is never a measure of how urgent, distressed or articulate they sounded. Scoring
-emergency calls on how well somebody speaks under stress would systematically penalise
-elderly callers, panicked callers, and callers speaking a second language. This system
-resolves location only — it does not rank urgency and must not be used to decide whose
-emergency matters more.
-
-Confidence bands are set by what voice reports can physically support. A spoken 16-point
-compass bearing is quantised to 22.5° sectors, so no verbal report constrains a direction
-better than about ±11°; at a typical 7 km reporting range that alone puts a ~3 km floor
-on the cross-range width of any fix. Sub-2 km² fixes are not reachable from voice and are
-not claimed.
+Next.js 16, React 19, TypeScript, Tailwind, Leaflet, Esri satellite tiles, Open-Meteo,
+and the Gemini API.

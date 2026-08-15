@@ -7,9 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "gen:audio": "node scripts/gen-audio.mjs",
-    "verify": "tsx scripts/verify-geometry.ts",
-    "demo": "DEMO_MODE=replay next dev"
+    "analyze": "tsx scripts/analyze-reports.ts"
   },
   "dependencies": {
     "@google/genai": "^2.17.1",
