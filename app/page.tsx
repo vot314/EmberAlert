@@ -18,13 +18,15 @@ type ReportRecord = {
   id: string;
   audio: string;
   label: string;
-  offsetSeconds: number;
+  offsetSeconds?: number;
   /** Playback gain; >1 amplifies a quiet recording via Web Audio. */
   gain?: number;
 };
 
+// Scenario config (map framing, region label) still comes from the static manifest;
+// the report LIST does not — it is fetched from /api/reports, which scans the audio
+// folders, and polled so a file dropped into `call audios/` appears by itself.
 const SCENARIO = manifest.scenario;
-const REPORTS = manifest.reports as ReportRecord[];
 
 type Resolved = { extraction: FireReport; source: string; latencyMs: number | null };
 
@@ -38,6 +40,7 @@ export default function Page() {
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
   const [showWind, setShowWind] = useState<boolean>(true);
   const [windData, setWindData] = useState<WindData | null>(null);
+  const [reports, setReports] = useState<ReportRecord[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -45,11 +48,35 @@ export default function Page() {
     fetchRealtimeWind(SCENARIO.initialView.lat, SCENARIO.initialView.lng).then(setWindData);
   }, []);
 
+  // Poll the folder scan. Three seconds is imperceptible for a human dropping in a
+  // file, and the request is a directory listing — no audio moves until analysis.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/reports", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as { reports: ReportRecord[] };
+        setReports((prev) =>
+          JSON.stringify(prev) === JSON.stringify(body.reports) ? prev : body.reports,
+        );
+      } catch {
+        // Transient dev-server hiccup; the next tick retries.
+      }
+    };
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   // Incidents are derived from the analysed calls, recomputed from scratch each time one
   // lands — cheap, and the board can never drift out of sync with the reports behind it.
   const allIncidents: Incident[] = useMemo(() => {
     const analyzed: AnalyzedReport[] = [];
-    for (const rec of REPORTS) {
+    for (const rec of reports) {
       const r = resolved[rec.id];
       if (!r) continue;
       analyzed.push(analyzeReport(rec.id, rec.label, r.extraction));
@@ -67,7 +94,7 @@ export default function Page() {
       reason: f.reason,
       transcripts: f.reports.map((r) => r.report.transcript),
     }));
-  }, [resolved]);
+  }, [resolved, reports]);
 
   const incidents = useMemo(() => {
     if (severityFilter === "ALL") return allIncidents;
@@ -85,7 +112,7 @@ export default function Page() {
     return counts;
   }, [allIncidents]);
 
-  const queueRows: QueueRow[] = REPORTS.map((rec) => {
+  const queueRows: QueueRow[] = reports.map((rec) => {
     const r = resolved[rec.id];
     return {
       id: rec.id,
@@ -109,7 +136,7 @@ export default function Page() {
    * graph replaces its direct output, hence connecting on to the destination.
    */
   function playAudio(id: string) {
-    const rec = REPORTS.find((r) => r.id === id);
+    const rec = reports.find((r) => r.id === id);
     if (!rec) return;
 
     audioRef.current?.pause();
@@ -179,7 +206,7 @@ export default function Page() {
     setResolved({});
     setErrors({});
     setSelectedId(null);
-    for (const rec of REPORTS) {
+    for (const rec of reports) {
       await analyzeOne(rec.id);
     }
     setRunning(false);

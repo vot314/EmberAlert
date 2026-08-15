@@ -31,7 +31,9 @@ position or a ranking itself, so those results are predictable and easy to check
 
 ## The calls
 
-Five recordings from across British Columbia, in `public/reports/`.
+Five recordings from across British Columbia. To add your own, drop an `.mp3` (or
+`.wav`/`.m4a`) into the `call audios/` folder — it appears in the queue within a few
+seconds, no restart or config needed.
 
 | Call | Fire | Severity |
 |---|---|---|
@@ -60,6 +62,7 @@ nothing.
 | `lib/fires.ts` | Merging and ranking |
 | `lib/wind.ts` | Live wind fronts (Open-Meteo) |
 | `components/MapView.tsx` | Leaflet map, markers and wind |
+| `call audios/` | Drop recordings here; the app picks them up automatically |
 | `fixtures/extractions/` | Saved results, used when there is no key |
 | `backend/` | Separate Python experiment |
 
